@@ -834,19 +834,21 @@ async function sttTranscribe(blob){
   return ((await r.json()).text||"").trim();
 }
 /* 取代原本的純 sleep 留白：回饋開啟時在留白期間錄音；錄不到就退化成純等待 */
-async function fbRecord(ms,id){
+async function fbRecord(ms,id,liveText){
   if(!fbOn()){await sleep(ms,id);return null;}
   try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});}
   catch(e){$("fbChk").checked=false;setStatus("drillStatus","⚠ 無法使用麥克風，正誤回饋已關閉："+e.message);await sleep(ms,id);return null;}
   const mr=new MediaRecorder(fbStream);const chunks=[];
   mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
   mr.start();
+  const live=liveText?await liveStart(liveText):null;/* 卡拉OK式即時跟唱視圖 */
   await sleep(ms,id);
+  if(live)live.stop();
   const blob=await new Promise(res=>{mr.onstop=()=>res(new Blob(chunks,{type:mr.mimeType||"audio/webm"}));mr.stop();});
   return blob.size?blob:null;
 }
 async function fbGap(ms,id,expected,kana,sid){
-  const blob=await fbRecord(ms,id);
+  const blob=await fbRecord(ms,id,expected);
   if(blob){fbCheck(blob,expected,kana,sid);fbPitch(blob,expected);}
 }
 /* 說完直接在操練畫面畫腔調曲線（沿用⑤的音高管線；需雲端 TTS 音檔當示範，無 key 靜默略過） */
@@ -903,6 +905,63 @@ function fbReplaySeg(){
   const end=g.t+g.d+0.15;
   a.ontimeupdate=()=>{if(a.currentTime>=end)a.pause();};
   a.play().catch(()=>{});
+}
+/* ---- 卡拉OK式即時跟唱：示範曲線當軌道，開口的同時把自己的音高畫上去 ---- */
+function pitchOfFrame(x,sr){/* 單一 frame 的自相關音高（70–420Hz），無聲回 0 */
+  let e0=0;for(let i=0;i<x.length;i++)e0+=x[i]*x[i];
+  if(Math.sqrt(e0/x.length)<0.01)return 0;
+  const lagMin=Math.floor(sr/420),lagMax=Math.min(Math.ceil(sr/70),x.length-1);
+  let best=0,bl=0;
+  for(let lag=lagMin;lag<=lagMax;lag++){
+    let c=0,e1=0;
+    for(let i=0;i+lag<x.length;i++){c+=x[i]*x[i+lag];e1+=x[i+lag]*x[i+lag];}
+    const r=c/Math.sqrt(e0*e1+1e-9);
+    if(r>best){best=r;bl=lag;}
+  }
+  return(best>0.5&&bl)?sr/bl:0;
+}
+function liveDraw(A,upts,cur){
+  const cv=$("fbCanvas"),c=cv.getContext("2d"),W=cv.width,H=cv.height;
+  c.clearRect(0,0,W,H);
+  const lo=-8,hi=8,yy=v=>H-((Math.max(lo,Math.min(hi,v))-lo)/(hi-lo))*H;
+  c.strokeStyle="#ddd";c.lineWidth=1;c.beginPath();c.moveTo(0,yy(0));c.lineTo(W,yy(0));c.stroke();
+  c.strokeStyle="#c04a2b";c.lineWidth=2.5;c.beginPath();
+  A.forEach((v,i)=>{const px=i/(A.length-1)*W;if(i)c.lineTo(px,yy(v));else c.moveTo(px,yy(v));});c.stroke();
+  if(upts.length){
+    const fsv=upts.map(p=>p.f).slice().sort((a,b)=>a-b);const med=fsv[Math.floor(fsv.length/2)];
+    c.strokeStyle="#2b6cb0";c.lineWidth=2.5;c.beginPath();
+    upts.forEach((p,i)=>{const px=Math.min(1,p.x)*W,py=yy(12*Math.log2(p.f/med));if(i)c.lineTo(px,py);else c.moveTo(px,py);});c.stroke();
+  }
+  if(cur>0){c.strokeStyle="rgba(43,108,176,0.5)";c.lineWidth=1;c.beginPath();c.moveTo(Math.min(1,cur)*W,0);c.lineTo(Math.min(1,cur)*W,H);c.stroke();}
+  c.font="14px sans-serif";c.fillStyle="#c04a2b";c.fillText("── 示範軌道",10,18);c.fillStyle="#2b6cb0";c.fillText("── 你（即時）",110,18);
+}
+const liveCache=new Map();/* text|voice|rate → 示範 contour（pitchTrack 較重，快取住） */
+async function liveModel(text){
+  const key=text+"|"+$("voiceSel").value+"|"+$("rate").value;
+  if(liveCache.has(key))return liveCache.get(key);
+  const A=contour(pitchTrack(await decodeUrl(await synthCloud(text))),48);
+  liveCache.set(key,A);return A;
+}
+async function liveStart(text){
+  if(!$("apiKey").value.trim())return null;
+  let A;try{A=await liveModel(text);}catch(e){return null;}
+  if(!A)return null;
+  const ac=actxGet();if(ac.state==="suspended")try{ac.resume();}catch(e){}
+  const src=ac.createMediaStreamSource(fbStream);
+  const an=ac.createAnalyser();an.fftSize=2048;src.connect(an);
+  const buf=new Float32Array(an.fftSize);
+  const upts=[];let t0=0,stopped=false;
+  $("fbReplaySeg").style.display="none";$("fbPitchInfo").textContent="🎤 跟著紅色軌道說——你的音高會即時畫上去";
+  const timer=setInterval(()=>{
+    if(stopped)return;
+    an.getFloatTimeDomainData(buf);
+    const f=pitchOfFrame(buf,ac.sampleRate);
+    const now=performance.now()/1000;
+    if(f>0&&!t0)t0=now;/* 游標從你開口那一刻起跑，掃完示範時長 */
+    if(f>0&&t0&&now-t0<=A.dur*1.2)upts.push({x:(now-t0)/A.dur,f:f});
+    liveDraw(A.pts,upts,t0?(now-t0)/A.dur:0);
+  },45);
+  return{stop(){stopped=true;clearInterval(timer);try{src.disconnect();}catch(e){}}};
 }
 /* 正規化：去標點空白、全形轉半形，並歸一 Whisper 與教材常見的正字法差異（私/わたし、下さい/ください、阿拉伯數字/漢數字） */
 function fbNorm(s){return(s||"").replace(/[\s　。、．，？！?!「」『』（）()・…〜~]/g,"").replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/私/g,"わたし").replace(/下さい/g,"ください").replace(/[0-9]/g,d=>"〇一二三四五六七八九"[d]);}
@@ -1064,7 +1123,7 @@ async function playItem(i,id){
   const ok=()=>state.runId===id&&state.running;
   if(state.mode==="listen"){
     const[jp,kana,cn]=arr[i];showText(jp,kana,cn);
-    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(jp);if(!ok())return false;setStatus("drillStatus","🗣 大聲跟讀！");const fbB=await fbRecord(gapFor(jp),id);if(fbB)fbPitch(fbB,jp);}
+    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(jp);if(!ok())return false;setStatus("drillStatus","🗣 大聲跟讀！");const fbB=await fbRecord(gapFor(jp),id,jp);if(fbB)fbPitch(fbB,jp);}
   }else if(state.mode==="sub"){
     const it=arr[i];
     if(it.type==="base"){
