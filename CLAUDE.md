@@ -31,6 +31,7 @@ node -e "const s=require('fs').readFileSync('fsi-japanese-trainer.html','utf8');
 - **四種練習模式**：`playItem()` 依 `state.mode`（listen/sub/qa/build）決定播放與停頓流程；`runFrom()` 是主迴圈。
 - **錄音與腔調分析**：MediaRecorder 錄音 + Web Audio 解碼，`pitchTrack()`（自相關法）抽音高、`contour()` 正規化、`analyzePitch()` 算相似度/語速/句尾升降並畫圖。
 - **正誤回饋（選用）**：`fbGap()` 取代代換/應答留白的純 sleep，開啟時錄音並 POST 到使用者自填的 STT endpoint（OpenAI 相容），`fbSim()`（Levenshtein + `fbNorm()` 正字法歸一）比對正解後顯示於 `fbArea`；辨識在背景進行不阻塞播放。LLM endpoint 欄位留給開放應答模式。
+- **間隔複習**：`srs*()` 函式群（Leitner 五盒，localStorage 鍵 `fsi_srs`，每句鍵＝`mode|lesson|id`）。`runFrom(0)` 時 `srsBuildReview()` 把到期句插到 `state.review`（items() 會 concat 在最前）；升降盒由 `fbCheck`（回饋開啟）或 `runFrom` 迴圈（關閉）呼叫 `srsMark()`。句子識別用物件參照 `indexOf`（`srsIdOf`），所以隨機順序下也正確。
 - **自訂教材**：使用者貼句子後產生 `state.customLesson`（`lesson === -1` 時使用）。
 
 ## 教材資料格式（修改 LESSONS 時必須遵守）
