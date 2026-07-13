@@ -891,14 +891,14 @@ function scoreSave(v){
 }
 function scoreBadge(i){/* 取已練模式中較弱的一項當精熟度下限 */
   const L=scores[i];if(!L)return"";
-  const vals=["sub","qa"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
+  const vals=["sub","qa","build"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
   if(!vals.length)return"";
   const b=Math.min.apply(null,vals);
   return b>=75?"　✅"+b+"%":"　⚠"+b+"%";
 }
 function finishRound(){/* 回合結算；遲到的 STT 結果會再次呼叫以更新 */
   const v=roundVerdict(roundStats);
-  if(!v||(state.mode!=="sub"&&state.mode!=="qa")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
+  if(!v||(state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="build")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
   scoreSave(v);
   const stat="本輪 "+v.avg+"%（✅"+v.ok+" 🔶"+v.mid+" ❌"+v.bad+"）";
   const nxt=state.lesson>=0&&state.lesson<LESSONS.length-1?LESSONS[state.lesson+1].t:"";
@@ -1042,7 +1042,7 @@ async function playItem(i,id){
   }else if(state.mode==="build"){
     const it=arr[i];const b=it.b;
     showText(it.p,it.last?b.full[1]:"",it.last?b.full[2]:"（逐段累加，跟讀每一段）");
-    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(it.p);if(!ok())return false;setStatus("drillStatus","🗣 跟讀！");await sleep(gapFor(it.p),id);}
+    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(it.p);if(!ok())return false;setStatus("drillStatus","🗣 跟讀！");await fbGap(gapFor(it.p),id,it.p,it.last?b.full[1]:"",null);}/* 逐段也計分，但不進 SRS */
   }
   return true;
 }

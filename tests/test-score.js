@@ -46,6 +46,8 @@ check(scoreBadge(0) === "　✅82%", "只練過 sub → 徽章用 sub best");
 scores[0].qa = { best: 55 };
 check(scoreBadge(0) === "　⚠55%", "sub+qa 都練過 → 取較弱一項（精熟下限）");
 check(scoreBadge(9) === "", "沒練過的課 → 無徽章");
+scores[0].build = { best: 40 };
+check(scoreBadge(0) === "　⚠40%", "build 也計入精熟下限");
 state.lesson = -1;
 scoreSave({ avg: 99 });
 check(!scores[-1], "自訂教材不記分");
@@ -61,6 +63,14 @@ check(getStatus().includes("💪") && getStatus().includes("重練"), "不合格
 pushStats([]);
 finishRound();
 check(getStatus().includes("本輪完成"), "無評分資料 → 原本的完成訊息");
+state.mode = "build";
+pushStats([90, 88]);
+finishRound();
+check(getStatus().includes("🎉") && scores[0].build.best === 89, "build 模式也結算並記分");
+state.mode = "listen";
+pushStats([90, 88]);
+finishRound();
+check(getStatus().includes("本輪完成"), "listen 模式不結算（只有腔調圖）");
 
 console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
 process.exit(fails ? 1 : 0);
