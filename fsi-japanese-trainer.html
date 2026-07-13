@@ -67,10 +67,24 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <label class="opt"><input type="checkbox" id="showKana" checked>假名</label>
     <label class="opt"><input type="checkbox" id="showCn" checked>中文</label>
     <label class="opt"><input type="checkbox" id="shuffleOrd">隨機順序</label>
+    <label class="opt"><input type="checkbox" id="fbChk">正誤回饋</label>
   </div>
   <details><summary>如何取得 API Key？</summary>
     <div style="margin-top:6px;line-height:1.7;">
       到 <b>console.cloud.google.com</b> 建立專案 → 搜尋並啟用「Cloud Text-to-Speech API」→ 「憑證」→「建立憑證」→「API 金鑰」，貼到上方即可。每月 WaveNet/Neural2 有 100 萬字元免費額度，個人練習幾乎用不完。Key 只存在你的瀏覽器（localStorage），不會上傳。
+    </div>
+  </details>
+  <details><summary>本地 AI 設定（選用：正誤回饋／開放應答）</summary>
+    <div class="row" style="margin-top:8px;">
+      <input type="text" id="sttUrl" placeholder="STT URL（例 http://localhost:8000/v1/audio/transcriptions）" style="flex:2;min-width:220px;">
+      <input type="text" id="sttModel" placeholder="STT 模型名（依伺服器，可留空）" style="flex:1;min-width:140px;">
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <input type="text" id="llmUrl" placeholder="LLM URL（例 http://localhost:11434/v1/chat/completions）" style="flex:2;min-width:220px;">
+      <input type="text" id="llmModel" placeholder="LLM 模型名（例 qwen2.5:32b）" style="flex:1;min-width:140px;">
+    </div>
+    <div style="margin-top:6px;line-height:1.7;" class="small">
+      接自己工作站的 Whisper／LLM（OpenAI 相容 API）。遠端機器用 <b>ssh -L 埠轉發</b>到 localhost 即可，瀏覽器允許 HTTPS 頁面連 localhost。伺服器需允許 CORS（Ollama 設 <b>OLLAMA_ORIGINS=*</b>；faster-whisper 可用 speaches 等 server）。設定只存在瀏覽器。
     </div>
   </details>
   <div class="status" id="ttsStatus"></div>
@@ -108,6 +122,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button id="btnReplay">🔁 重播</button>
   </div>
   <div class="status" id="drillStatus"></div>
+  <div id="fbArea" class="small" style="margin-top:6px;line-height:1.8;"></div>
 </div>
 
 <div class="card" id="recCard" style="display:none;">
@@ -786,6 +801,55 @@ function stopAudio(){
 function sleep(ms,id){return new Promise(r=>{const t=setInterval(()=>{if(state.runId!==id||!state.running){clearInterval(t);r();}},100);setTimeout(()=>{clearInterval(t);r();},ms);});}
 function gapFor(text){return Math.max(1400,text.length*160*parseFloat($("gapMul").value)/parseFloat($("rate").value));}
 
+/* ================= 正誤回饋（自架 STT，選用） ================= */
+let fbStream=null,fbSeq=0;
+function fbOn(){return $("fbChk").checked&&!!$("sttUrl").value.trim();}
+async function sttTranscribe(blob){
+  const fd=new FormData();
+  fd.append("file",blob,"speech.webm");
+  const model=$("sttModel").value.trim();if(model)fd.append("model",model);
+  fd.append("language","ja");fd.append("response_format","json");
+  const r=await fetch($("sttUrl").value.trim(),{method:"POST",body:fd});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return ((await r.json()).text||"").trim();
+}
+/* 取代原本的純 sleep 留白：回饋開啟時在留白期間錄音，結束後背景辨識比對，不阻塞播放流程 */
+async function fbGap(ms,id,expected,kana){
+  if(!fbOn()){await sleep(ms,id);return;}
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});}
+  catch(e){$("fbChk").checked=false;setStatus("drillStatus","⚠ 無法使用麥克風，正誤回饋已關閉："+e.message);await sleep(ms,id);return;}
+  const mr=new MediaRecorder(fbStream);const chunks=[];
+  mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  mr.start();
+  await sleep(ms,id);
+  const blob=await new Promise(res=>{mr.onstop=()=>res(new Blob(chunks,{type:mr.mimeType||"audio/webm"}));mr.stop();});
+  if(blob.size)fbCheck(blob,expected,kana);
+}
+/* 正規化：去標點空白、全形轉半形，並歸一 Whisper 與教材常見的正字法差異（私/わたし、下さい/ください、阿拉伯數字/漢數字） */
+function fbNorm(s){return(s||"").replace(/[\s　。、．，？！?!「」『』（）()・…〜~]/g,"").replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/私/g,"わたし").replace(/下さい/g,"ください").replace(/[0-9]/g,d=>"〇一二三四五六七八九"[d]);}
+function fbLev(a,b){
+  const m=a.length,n=b.length;if(!m)return n;if(!n)return m;
+  let prev=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){const cur=[i];
+    for(let j=1;j<=n;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;}
+  return prev[n];
+}
+function fbSim(a,b){a=fbNorm(a);b=fbNorm(b);if(!a||!b)return 0;return 1-fbLev(a,b)/Math.max(a.length,b.length);}
+async function fbCheck(blob,expected,kana){
+  const my=++fbSeq;
+  $("fbArea").textContent="⏳ 辨識中…";
+  try{
+    const heard=await sttTranscribe(blob);
+    if(my!==fbSeq)return;
+    if(!heard){$("fbArea").textContent="🤔 沒聽到聲音　正解："+expected;return;}
+    const pct=Math.round(Math.max(fbSim(heard,expected),kana?fbSim(heard,kana):0)*100);
+    if(pct>=85)$("fbArea").textContent="✅ 正確（"+pct+"%）　辨識："+heard;
+    else if(pct>=60)$("fbArea").textContent="🔶 接近（"+pct+"%）　你說："+heard+"　／　正解："+expected;
+    else $("fbArea").textContent="❌ 再試一次（"+pct+"%）　你說："+heard+"　／　正解："+expected;
+  }catch(e){if(my===fbSeq)$("fbArea").textContent="⚠ STT 失敗："+e.message;}
+}
+
 /* ================= 顯示 ================= */
 function setStatus(id,msg){$(id).textContent=msg;}
 function curLesson(){return state.lesson===-1?state.customLesson:LESSONS[state.lesson];}
@@ -847,7 +911,7 @@ async function playItem(i,id){
       const[cue,ans,ansKana,cn]=it.c;
       showText("","","",cue);
       setStatus("drillStatus","🔊 提示詞…");await say(cue);if(!ok())return false;
-      setStatus("drillStatus","🗣 說出完整新句！");await sleep(gapFor(ans),id);if(!ok())return false;
+      setStatus("drillStatus","🗣 說出完整新句！");await fbGap(gapFor(ans),id,ans,ansKana);if(!ok())return false;
       showText(ans,ansKana,cn);
       setStatus("drillStatus","🔊 解答…");await say(ans);if(!ok())return false;
       await sleep(gapFor(ans)*0.7,id);
@@ -856,7 +920,7 @@ async function playItem(i,id){
     const[q,qk,a,ak,cn]=arr[i];
     showText(q,qk,"");
     setStatus("drillStatus","🔊 問題…");await say(q);if(!ok())return false;
-    setStatus("drillStatus","🗣 自己回答！");await sleep(gapFor(a)*1.3,id);if(!ok())return false;
+    setStatus("drillStatus","🗣 自己回答！");await fbGap(gapFor(a)*1.3,id,a,ak);if(!ok())return false;
     showText(q,qk,cn);
     setStatus("drillStatus","🔊 示範解答…");await say(a);if(!ok())return false;
     showText(a,ak,cn);
@@ -1092,12 +1156,23 @@ $("customLoad").onclick=()=>{
 };
 ["showJp","showKana","showCn"].forEach(id=>$(id).onchange=()=>{const a=items()[state.idx];updateProg();});
 $("shuffleOrd").onchange=()=>{stopRun();shufSeed++;state.idx=0;store.set("fsi_shuffle",$("shuffleOrd").checked?"1":"0");updateProg();};
+[["sttUrl","fsi_stt_url"],["sttModel","fsi_stt_model"],["llmUrl","fsi_llm_url"],["llmModel","fsi_llm_model"]].forEach(([id,k])=>$(id).onchange=()=>store.set(k,$(id).value.trim()));
+$("fbChk").onchange=async()=>{
+  store.set("fsi_fb",$("fbChk").checked?"1":"0");
+  if(!$("fbChk").checked){$("fbArea").textContent="";return;}
+  if(!$("sttUrl").value.trim()){$("fbChk").checked=false;$("fbArea").textContent="⚠ 請先在「本地 AI 設定」填 STT URL";return;}
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});$("fbArea").textContent="🎤 正誤回饋已開啟：代換・應答留白時會錄音並比對";}
+  catch(e){$("fbChk").checked=false;$("fbArea").textContent="⚠ 無法使用麥克風："+e.message;}
+};
 
 /* ================= 初始化 ================= */
 (function init(){
   $("apiKey").value=store.get("fsi_gtts_key","");
   const v=store.get("fsi_voice","");if(v)$("voiceSel").value=v;
   $("shuffleOrd").checked=store.get("fsi_shuffle","0")==="1";
+  $("sttUrl").value=store.get("fsi_stt_url","");$("sttModel").value=store.get("fsi_stt_model","");
+  $("llmUrl").value=store.get("fsi_llm_url","");$("llmModel").value=store.get("fsi_llm_model","");
+  $("fbChk").checked=store.get("fsi_fb","0")==="1"&&!!$("sttUrl").value;
   const c=store.get("fsi_custom","");if(c){$("customText").value=c;
     const lines=c.split("\n").map(s=>s.trim()).filter(Boolean);
     if(lines.length){const listen=lines.map(l=>{const p=l.split(/[|｜]/);return[p[0].trim(),"",(p[1]||"").trim()];});

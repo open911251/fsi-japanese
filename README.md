@@ -11,6 +11,11 @@
 - **④ 逐段累加**：由句尾往前逐段建構長句（backward build-up）
 - **⑤ 錄音對比＋腔調分析**：錄自己的發音，與示範 A/B 對比；一鍵分析音高曲線差異（相似度、語速、句首中尾高低、句尾升降方向），並有半速對比播放
 - **自訂教材**：貼上任何句子（如課本課文）直接操練
+- **正誤回饋（選用，自架 STT）**：②③模式留白時錄音，送自己架的 Whisper 辨識後與正解比對，即時顯示對錯與差異
+
+## 自架 STT／LLM（選用）
+
+「本地 AI 設定」可填 OpenAI 相容的 STT／LLM endpoint（如工作站上的 faster-whisper server、Ollama）。遠端機器用 `ssh -L` 把埠轉發到 localhost 即可——瀏覽器允許 HTTPS 頁面連 localhost，不需要另外弄憑證。伺服器記得開 CORS（Ollama 設 `OLLAMA_ORIGINS=*`）。腔調分析不走 STT（Whisper 會丟棄韻律），維持音高曲線對比。
 
 ## 教材
 
