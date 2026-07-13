@@ -1,0 +1,3 @@
+# server/ 的檔案會部署到 Linux 工作站，必須保持 LF（CRLF 會讓 bash 腳本爆掉）
+*.sh text eol=lf
+*.py text eol=lf
