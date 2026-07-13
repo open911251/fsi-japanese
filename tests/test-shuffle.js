@@ -12,7 +12,7 @@ const lessons = script.slice(script.indexOf("const LESSONS=["), lEnd + 2);
 const blk = script.slice(script.indexOf("function itemsRaw"), script.indexOf("function showText"));
 
 const make = new Function("OPTS", lessons + `
-  const $=id=>({checked:OPTS.checked});
+  const $=id=>({checked:id==="prevChk"?!!OPTS.preview:OPTS.checked});
   const state={mode:OPTS.mode,lesson:OPTS.lesson,idx:0,review:[]};
   function curLesson(){return LESSONS[state.lesson];}
   ${blk}
@@ -56,6 +56,34 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
     if (t === 29) check(true, "sub 隨機 30 輪：基本句永遠在前、cues 集合不變");
   }
 }
+// 代換詞預習：base → 全部 prev（原順序）→ cues；關閉時無 prev
+{
+  const off = make({ checked: false, mode: "sub", lesson: 7 });
+  check(!off.items().some(x => x.type === "prev"), "預習關閉 → 無 prev 項目");
+  const m = make({ checked: false, mode: "sub", lesson: 7, preview: true });
+  const arr = m.items();
+  let ok = true;
+  arr.filter(x => x.type === "base").map(x => x.s).forEach(s => {
+    const bi = arr.findIndex(x => x.type === "base" && x.s === s);
+    const prevs = arr.slice(bi + 1, bi + 1 + s.cues.length);
+    if (!prevs.every((x, j) => x.type === "prev" && x.c === s.cues[j])) ok = false;
+    const cues = arr.slice(bi + 1 + s.cues.length, bi + 1 + 2 * s.cues.length);
+    if (!cues.every(x => x.type === "cue" && x.s === s)) ok = false;
+  });
+  check(ok, "預習開啟 → base 後接原順序 prev，再接 cues");
+  const ms = make({ checked: true, mode: "sub", lesson: 7, preview: true });
+  const arrS = ms.items();
+  let okS = true;
+  arrS.filter(x => x.type === "base").map(x => x.s).forEach(s => {
+    const bi = arrS.findIndex(x => x.type === "base" && x.s === s);
+    const prevs = arrS.slice(bi + 1, bi + 1 + s.cues.length);
+    if (!prevs.every((x, j) => x.type === "prev" && x.c === s.cues[j])) okS = false;
+    const cues = arrS.slice(bi + 1 + s.cues.length, bi + 1 + 2 * s.cues.length).map(x => x.c);
+    if (key(cues.slice().sort()) !== key(s.cues.slice().sort())) okS = false;
+  });
+  check(okS, "預習＋隨機並用 → prev 維持原順序、cues 集合不變");
+}
+
 // listen / build 開著隨機也不受影響
 {
   const l = make({ checked: true, mode: "listen", lesson: 0 });

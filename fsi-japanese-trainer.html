@@ -68,6 +68,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <label class="opt"><input type="checkbox" id="showCn" checked>中文</label>
     <label class="opt"><input type="checkbox" id="shuffleOrd">隨機順序</label>
     <label class="opt"><input type="checkbox" id="fbChk">正誤回饋</label>
+    <label class="opt"><input type="checkbox" id="prevChk">代換詞預習</label>
   </div>
   <details><summary>如何取得 API Key？</summary>
     <div style="margin-top:6px;line-height:1.7;">
@@ -902,7 +903,7 @@ function srsBuildReview(){
 function itemsRaw(){
   const L=curLesson();if(!L)return[];
   if(state.mode==="listen")return L.listen;
-  if(state.mode==="sub"){const arr=[];L.sub.forEach(s=>{arr.push({type:"base",s});s.cues.forEach(c=>arr.push({type:"cue",s,c}));});return arr;}
+  if(state.mode==="sub"){const arr=[];L.sub.forEach(s=>{arr.push({type:"base",s});if($("prevChk").checked)s.cues.forEach(c=>arr.push({type:"prev",s,c}));s.cues.forEach(c=>arr.push({type:"cue",s,c}));});return arr;}
   if(state.mode==="qa")return L.qa;
   if(state.mode==="build"){const b=L.build;return b?b.parts.map((p,i)=>({p,last:i===b.parts.length-1,b})):[];}
   return[];
@@ -915,11 +916,11 @@ function items(){
   const raw=itemsRaw();
   let arr=raw;
   if($("shuffleOrd").checked&&(state.mode==="sub"||state.mode==="qa")){
-    const key=state.mode+"|"+state.lesson+"|"+shufSeed;
+    const key=state.mode+"|"+state.lesson+"|"+shufSeed+"|"+$("prevChk").checked;
     if(shufCache.key!==key){
       let sh;
       if(state.mode==="qa")sh=shuffle(raw);
-      else{sh=[];curLesson().sub.forEach(s=>{sh.push({type:"base",s});shuffle(s.cues).forEach(c=>sh.push({type:"cue",s,c}));});}
+      else{sh=[];curLesson().sub.forEach(s=>{sh.push({type:"base",s});if($("prevChk").checked)s.cues.forEach(c=>sh.push({type:"prev",s,c}));shuffle(s.cues).forEach(c=>sh.push({type:"cue",s,c}));});}
       shufCache={key:key,arr:sh};
     }
     arr=shufCache.arr;
@@ -958,6 +959,13 @@ async function playItem(i,id){
       showText(it.s.base[0],it.s.base[1],"句型："+it.s.p);
       setStatus("drillStatus","🔊 基本句…");await say(it.s.base[0]);if(!ok())return false;
       setStatus("drillStatus","🗣 跟讀基本句");await sleep(gapFor(it.s.base[0]),id);
+    }else if(it.type==="prev"){/* 預習：唸代換詞→直接給解答句，不要求產出（FSI breakdown） */
+      const[cue,ans,ansKana,cn]=it.c;
+      showText(ans,ansKana,cn);
+      $("cueArea").innerHTML='<div class="cue-box">📖 預習代換詞：<b>'+cue+"</b></div>";
+      setStatus("drillStatus","📖 預習…");await say(cue);if(!ok())return false;
+      await say(ans);if(!ok())return false;
+      await sleep(gapFor(ans)*0.5,id);
     }else{
       const[cue,ans,ansKana,cn]=it.c;
       showText("","",i<state.review.length?"句型："+it.s.p:"",cue);/* 複習題沒播過基本句，補句型提示 */
@@ -1211,6 +1219,7 @@ $("customLoad").onclick=()=>{
 ["showJp","showKana","showCn"].forEach(id=>$(id).onchange=()=>{const a=items()[state.idx];updateProg();});
 $("shuffleOrd").onchange=()=>{stopRun();shufSeed++;state.idx=0;store.set("fsi_shuffle",$("shuffleOrd").checked?"1":"0");updateProg();};
 [["sttUrl","fsi_stt_url"],["sttModel","fsi_stt_model"],["llmUrl","fsi_llm_url"],["llmModel","fsi_llm_model"]].forEach(([id,k])=>$(id).onchange=()=>store.set(k,$(id).value.trim()));
+$("prevChk").onchange=()=>{stopRun();state.idx=0;store.set("fsi_preview",$("prevChk").checked?"1":"0");updateProg();};
 $("fbChk").onchange=async()=>{
   store.set("fsi_fb",$("fbChk").checked?"1":"0");
   if(!$("fbChk").checked){$("fbArea").textContent="";return;}
@@ -1224,6 +1233,7 @@ $("fbChk").onchange=async()=>{
   $("apiKey").value=store.get("fsi_gtts_key","");
   const v=store.get("fsi_voice","");if(v)$("voiceSel").value=v;
   $("shuffleOrd").checked=store.get("fsi_shuffle","0")==="1";
+  $("prevChk").checked=store.get("fsi_preview","0")==="1";
   $("sttUrl").value=store.get("fsi_stt_url","");$("sttModel").value=store.get("fsi_stt_model","");
   $("llmUrl").value=store.get("fsi_llm_url","");$("llmModel").value=store.get("fsi_llm_model","");
   $("fbChk").checked=store.get("fsi_fb","0")==="1"&&!!$("sttUrl").value;
