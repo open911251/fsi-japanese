@@ -16,7 +16,9 @@
 
 ## 自架 STT／LLM（選用）
 
-「本地 AI 設定」可填 OpenAI 相容的 STT／LLM endpoint（如工作站上的 faster-whisper server、Ollama）。遠端機器用 `ssh -L` 把埠轉發到 localhost 即可——瀏覽器允許 HTTPS 頁面連 localhost，不需要另外弄憑證。伺服器記得開 CORS（Ollama 設 `OLLAMA_ORIGINS=*`）。腔調分析不走 STT（Whisper 會丟棄韻律），維持音高曲線對比。
+「本地 AI 設定」可填 OpenAI 相容的 STT／LLM endpoint（如工作站上的 faster-whisper server、Ollama）。遠端機器用 `ssh -L` 把埠轉發到 localhost 即可——瀏覽器允許 HTTPS 頁面連 localhost，不需要另外弄憑證。腔調分析不走 STT（Whisper 會丟棄韻律），維持音高曲線對比。
+
+現成的後端在 `server/`：一個 FastAPI 同時提供 Whisper 辨識與 Ollama 反向代理（自動補 CORS，不用改 Ollama 設定），只綁 127.0.0.1。部署：裝好 venv 依賴（`faster-whisper fastapi uvicorn python-multipart httpx`，GPU 加 `nvidia-cublas-cu12 nvidia-cudnn-cu12`）後 `tmux new -d -s fsi ./start.sh`。
 
 ## 教材
 

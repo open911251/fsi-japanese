@@ -10,16 +10,16 @@ FSI（美國外交學院）口語操練法的日語自學工具。**整個應用
 
 ## 常用指令
 
-無 build/lint/test。開發時直接用瀏覽器開啟 `fsi-japanese-trainer.html` 驗證。
+無 build/lint。開發時直接用瀏覽器開啟 `fsi-japanese-trainer.html` 驗證。測試在 `tests/`（node 直接跑，會從 HTML 抽出實際程式碼測）：
 
-改完教材資料後，用 node 驗證 JS 語法與欄位數（把 `<script>` 內容抽出來跑）：
-
-```powershell
-# 抽出 script 內容並檢查語法
-node -e "const s=require('fs').readFileSync('fsi-japanese-trainer.html','utf8');const m=s.match(/<script>([\s\S]*)<\/script>/);new Function(m[1].replace(/document|window|navigator/g,'({})' ));console.log('syntax OK')"
+```
+node tests/validate-lessons.js fsi-japanese-trainer.html   # LESSONS 欄位數驗證（改教材後必跑）
+node tests/test-shuffle.js fsi-japanese-trainer.html       # 隨機順序邏輯（含全 script 語法檢查）
+node tests/test-feedback.js fsi-japanese-trainer.html      # 正誤回饋的正規化與相似度比對
+node tests/test-srs.js fsi-japanese-trainer.html           # 間隔複習升降盒/到期/鍵還原
 ```
 
-（實務上可寫臨時腳本抽出 `LESSONS` 陣列，逐課檢查各欄位數，見下方資料格式。）
+改動 `<script>` 內程式後至少跑一個 test-*.js（它們都先做全 script 語法編譯檢查）。測試靠字串錨點（如 `function itemsRaw`、`/* ================= 狀態`）從 HTML 切程式碼，改函式名或區段註解時要同步更新測試。
 
 ## 架構
 
@@ -33,6 +33,8 @@ node -e "const s=require('fs').readFileSync('fsi-japanese-trainer.html','utf8');
 - **正誤回饋（選用）**：`fbGap()` 取代代換/應答留白的純 sleep，開啟時錄音並 POST 到使用者自填的 STT endpoint（OpenAI 相容），`fbSim()`（Levenshtein + `fbNorm()` 正字法歸一）比對正解後顯示於 `fbArea`；辨識在背景進行不阻塞播放。LLM endpoint 欄位留給開放應答模式。
 - **間隔複習**：`srs*()` 函式群（Leitner 五盒，localStorage 鍵 `fsi_srs`，每句鍵＝`mode|lesson|id`）。`runFrom(0)` 時 `srsBuildReview()` 把到期句插到 `state.review`（items() 會 concat 在最前）；升降盒由 `fbCheck`（回饋開啟）或 `runFrom` 迴圈（關閉）呼叫 `srsMark()`。句子識別用物件參照 `indexOf`（`srsIdOf`），所以隨機順序下也正確。
 - **自訂教材**：使用者貼句子後產生 `state.customLesson`（`lesson === -1` 時使用）。
+
+`server/` 是自架 STT/LLM 後端（跑在使用者的遠端工作站，非本 repo 部署範圍）：`server.py` 為 FastAPI（faster-whisper ＋ Ollama CORS 代理，只綁 127.0.0.1:8788），`start.sh` 為啟動腳本。改動後需手動部署到工作站。
 
 ## 教材資料格式（修改 LESSONS 時必須遵守）
 
