@@ -66,6 +66,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <label class="opt"><input type="checkbox" id="showJp" checked>日文</label>
     <label class="opt"><input type="checkbox" id="showKana" checked>假名</label>
     <label class="opt"><input type="checkbox" id="showCn" checked>中文</label>
+    <label class="opt"><input type="checkbox" id="shuffleOrd">隨機順序</label>
   </div>
   <details><summary>如何取得 API Key？</summary>
     <div style="margin-top:6px;line-height:1.7;">
@@ -788,13 +789,29 @@ function gapFor(text){return Math.max(1400,text.length*160*parseFloat($("gapMul"
 /* ================= 顯示 ================= */
 function setStatus(id,msg){$(id).textContent=msg;}
 function curLesson(){return state.lesson===-1?state.customLesson:LESSONS[state.lesson];}
-function items(){
+function itemsRaw(){
   const L=curLesson();if(!L)return[];
   if(state.mode==="listen")return L.listen;
   if(state.mode==="sub"){const arr=[];L.sub.forEach(s=>{arr.push({type:"base",s});s.cues.forEach(c=>arr.push({type:"cue",s,c}));});return arr;}
   if(state.mode==="qa")return L.qa;
   if(state.mode==="build"){const b=L.build;return b?b.parts.map((p,i)=>({p,last:i===b.parts.length-1,b})):[];}
   return[];
+}
+/* 隨機順序：只影響代換 cues（各句型內，基本句仍在前）與應答題序；聽讀、逐段累加不變。
+   items() 在播放迴圈中被反覆呼叫，故結果以 shufSeed 快取，一輪之內順序固定。 */
+let shufSeed=1,shufCache={key:"",arr:null};
+function shuffle(a){const x=a.slice();for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
+function items(){
+  const raw=itemsRaw();
+  if(!$("shuffleOrd").checked||(state.mode!=="sub"&&state.mode!=="qa"))return raw;
+  const key=state.mode+"|"+state.lesson+"|"+shufSeed;
+  if(shufCache.key!==key){
+    let arr;
+    if(state.mode==="qa")arr=shuffle(raw);
+    else{arr=[];curLesson().sub.forEach(s=>{arr.push({type:"base",s});shuffle(s.cues).forEach(c=>arr.push({type:"cue",s,c}));});}
+    shufCache={key:key,arr:arr};
+  }
+  return shufCache.arr;
 }
 function showText(jp,kana,cn,cue){
   const j=$("jpText"),k=$("kanaText"),c=$("cnText");
@@ -1041,7 +1058,7 @@ function switchMode(m){
 }
 $("lessonSel").onchange=e=>{stopRun();state.lesson=parseInt(e.target.value);state.idx=0;$("grammarInfo").textContent="文法重點："+(curLesson()?curLesson().g:"");switchMode(state.mode==="rec"||state.mode==="custom"?"listen":state.mode);};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>switchMode(b.dataset.mode));
-$("btnStart").onclick=()=>{if(state.running)return;runFrom(state.idx);};
+$("btnStart").onclick=()=>{if(state.running)return;if(state.idx===0)shufSeed++;runFrom(state.idx);};
 $("btnPause").onclick=()=>{stopRun();setStatus("drillStatus","已暫停，按「開始」從目前句子繼續。");};
 $("btnPrev").onclick=()=>{stopRun();state.idx=Math.max(0,state.idx-1);runFrom(state.idx);};
 $("btnNext").onclick=()=>{stopRun();state.idx=Math.min(items().length-1,state.idx+1);runFrom(state.idx);};
@@ -1074,11 +1091,13 @@ $("customLoad").onclick=()=>{
   state.lesson=-1;fillLessons();$("lessonSel").value=-1;switchMode("listen");
 };
 ["showJp","showKana","showCn"].forEach(id=>$(id).onchange=()=>{const a=items()[state.idx];updateProg();});
+$("shuffleOrd").onchange=()=>{stopRun();shufSeed++;state.idx=0;store.set("fsi_shuffle",$("shuffleOrd").checked?"1":"0");updateProg();};
 
 /* ================= 初始化 ================= */
 (function init(){
   $("apiKey").value=store.get("fsi_gtts_key","");
   const v=store.get("fsi_voice","");if(v)$("voiceSel").value=v;
+  $("shuffleOrd").checked=store.get("fsi_shuffle","0")==="1";
   const c=store.get("fsi_custom","");if(c){$("customText").value=c;
     const lines=c.split("\n").map(s=>s.trim()).filter(Boolean);
     if(lines.length){const listen=lines.map(l=>{const p=l.split(/[|｜]/);return[p[0].trim(),"",(p[1]||"").trim()];});
