@@ -20,6 +20,7 @@
   - CORS：Ollama 需設 `OLLAMA_ORIGINS=*`（llama.cpp/vLLM 各有對應開關）
   - 手機使用場景日後再考慮 Tailscale，暫不處理
 - **STT 也自架**：工作站跑 faster-whisper / whisper.cpp server 模式，網頁把現有 MediaRecorder 錄的 webm POST 過去。繞過 iOS Safari 無 Web Speech 辨識的問題，零 API 費。
+  - ✅ 2026-07-13 已部署：工作站使用者空間跑 FastAPI（faster-whisper large-v3-turbo GPU），同一 port 同時提供 STT 與 Ollama 的 CORS 代理，共用 Ollama 設定不動；只綁 127.0.0.1，經 ssh 隧道使用（單一 port 轉發即可）。
 - **網頁端只新增設定欄位**：「LLM endpoint URL」「STT endpoint URL」，存 localStorage（與 TTS key 同模式）。維持單一 HTML 檔、不引入外部依賴。做 OpenAI 相容格式，同欄位填雲端 API 也能用。
 - **母語者校對以 LLM 校對替代**（成本考量）；自然度終審用前沿模型，本地模型只做初篩。
 - 腔調回饋的強化方向（低優先）：比對該句的標準東京式重音型（OJAD／UniDic 重音資料），而非換掉音高對比法。
