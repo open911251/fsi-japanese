@@ -124,6 +124,8 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <div class="status" id="drillStatus"></div>
   <div id="fbArea" class="small" style="margin-top:6px;line-height:1.8;"></div>
+  <canvas id="fbCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
+  <div id="fbPitchInfo" class="small" style="margin-top:4px;"></div>
 </div>
 
 <div class="card" id="recCard" style="display:none;">
@@ -814,17 +816,36 @@ async function sttTranscribe(blob){
   if(!r.ok)throw new Error("HTTP "+r.status);
   return ((await r.json()).text||"").trim();
 }
-/* 取代原本的純 sleep 留白：回饋開啟時在留白期間錄音，結束後背景辨識比對，不阻塞播放流程 */
-async function fbGap(ms,id,expected,kana,sid){
-  if(!fbOn()){await sleep(ms,id);return;}
+/* 取代原本的純 sleep 留白：回饋開啟時在留白期間錄音；錄不到就退化成純等待 */
+async function fbRecord(ms,id){
+  if(!fbOn()){await sleep(ms,id);return null;}
   try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});}
-  catch(e){$("fbChk").checked=false;setStatus("drillStatus","⚠ 無法使用麥克風，正誤回饋已關閉："+e.message);await sleep(ms,id);return;}
+  catch(e){$("fbChk").checked=false;setStatus("drillStatus","⚠ 無法使用麥克風，正誤回饋已關閉："+e.message);await sleep(ms,id);return null;}
   const mr=new MediaRecorder(fbStream);const chunks=[];
   mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
   mr.start();
   await sleep(ms,id);
   const blob=await new Promise(res=>{mr.onstop=()=>res(new Blob(chunks,{type:mr.mimeType||"audio/webm"}));mr.stop();});
-  if(blob.size)fbCheck(blob,expected,kana,sid);
+  return blob.size?blob:null;
+}
+async function fbGap(ms,id,expected,kana,sid){
+  const blob=await fbRecord(ms,id);
+  if(blob){fbCheck(blob,expected,kana,sid);fbPitch(blob,expected);}
+}
+/* 說完直接在操練畫面畫腔調曲線（沿用⑤的音高管線；需雲端 TTS 音檔當示範，無 key 靜默略過） */
+async function fbPitch(blob,text){
+  try{
+    if(!$("apiKey").value.trim())return;
+    const url=await synthCloud(text);
+    const md=await decodeUrl(url);
+    const my=await actxGet().decodeAudioData(await blob.arrayBuffer());
+    const A=contour(pitchTrack(md),48),B=contour(pitchTrack(my),48);
+    if(!A||!B){$("fbCanvas").style.display="none";$("fbPitchInfo").textContent="";return;}
+    drawPitch(A.pts,B.pts,$("fbCanvas"));
+    const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
+    const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
+    $("fbPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%";
+  }catch(e){}
 }
 /* 正規化：去標點空白、全形轉半形，並歸一 Whisper 與教材常見的正字法差異（私/わたし、下さい/ください、阿拉伯數字/漢數字） */
 function fbNorm(s){return(s||"").replace(/[\s　。、．，？！?!「」『』（）()・…〜~]/g,"").replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/私/g,"わたし").replace(/下さい/g,"ください").replace(/[0-9]/g,d=>"〇一二三四五六七八九"[d]);}
@@ -846,10 +867,44 @@ async function fbCheck(blob,expected,kana,sid){
     if(!heard){$("fbArea").textContent="🤔 沒聽到聲音　正解："+expected;return;}
     const pct=Math.round(Math.max(fbSim(heard,expected),kana?fbSim(heard,kana):0)*100);
     srsMark(sid,pct>=85?1:(pct<60?-1:0));
+    roundStats.push(pct);if(roundDone)finishRound();/* 遲到的辨識結果補進回合結算 */
     if(pct>=85)$("fbArea").textContent="✅ 正確（"+pct+"%）　辨識："+heard;
     else if(pct>=60)$("fbArea").textContent="🔶 接近（"+pct+"%）　你說："+heard+"　／　正解："+expected;
     else $("fbArea").textContent="❌ 再試一次（"+pct+"%）　你說："+heard+"　／　正解："+expected;
   }catch(e){if(my===fbSeq)$("fbArea").textContent="⚠ STT 失敗："+e.message;}
+}
+
+/* ================= 回合評分（正誤回饋開啟的代換/應答才有） ================= */
+let roundStats=[],roundDone=false;
+let scores={};try{scores=JSON.parse(store.get("fsi_score","{}"))||{};}catch(e){}
+function roundVerdict(list){
+  const n=list.length;if(!n)return null;
+  const avg=Math.round(list.reduce((a,b)=>a+b,0)/n);
+  return{n:n,avg:avg,ok:list.filter(p=>p>=85).length,mid:list.filter(p=>p>=60&&p<85).length,bad:list.filter(p=>p<60).length,pass:avg>=75};
+}
+function scoreSave(v){
+  if(state.lesson<0)return;
+  const L=scores[state.lesson]||(scores[state.lesson]={});
+  const m=L[state.mode]||(L[state.mode]={best:0});
+  m.last=v.avg;m.best=Math.max(m.best,v.avg);m.t=Date.now();
+  store.set("fsi_score",JSON.stringify(scores));
+}
+function scoreBadge(i){/* 取已練模式中較弱的一項當精熟度下限 */
+  const L=scores[i];if(!L)return"";
+  const vals=["sub","qa"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
+  if(!vals.length)return"";
+  const b=Math.min.apply(null,vals);
+  return b>=75?"　✅"+b+"%":"　⚠"+b+"%";
+}
+function finishRound(){/* 回合結算；遲到的 STT 結果會再次呼叫以更新 */
+  const v=roundVerdict(roundStats);
+  if(!v||(state.mode!=="sub"&&state.mode!=="qa")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
+  scoreSave(v);
+  const stat="本輪 "+v.avg+"%（✅"+v.ok+" 🔶"+v.mid+" ❌"+v.bad+"）";
+  const nxt=state.lesson>=0&&state.lesson<LESSONS.length-1?LESSONS[state.lesson+1].t:"";
+  if(v.pass)setStatus("drillStatus","🎉 "+stat+"合格！"+(nxt?"建議下一課：「"+nxt+"」，或再練一輪加深。":""));
+  else setStatus("drillStatus","💪 "+stat+"未達 75%，建議按「開始」重練一輪。");
+  fillLessons();
 }
 
 /* ================= 顯示 ================= */
@@ -952,7 +1007,7 @@ async function playItem(i,id){
   const ok=()=>state.runId===id&&state.running;
   if(state.mode==="listen"){
     const[jp,kana,cn]=arr[i];showText(jp,kana,cn);
-    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(jp);if(!ok())return false;setStatus("drillStatus","🗣 大聲跟讀！");await sleep(gapFor(jp),id);}
+    for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(jp);if(!ok())return false;setStatus("drillStatus","🗣 大聲跟讀！");const fbB=await fbRecord(gapFor(jp),id);if(fbB)fbPitch(fbB,jp);}
   }else if(state.mode==="sub"){
     const it=arr[i];
     if(it.type==="base"){
@@ -993,7 +1048,8 @@ async function playItem(i,id){
 }
 async function runFrom(i){
   state.running=true;const id=++state.runId;
-  if(i===0)srsBuildReview();
+  if(i===0){srsBuildReview();roundStats=[];}
+  roundDone=false;
   $("btnStart").textContent="▶ 進行中…";
   for(let k=i;k<items().length;k++){
     if(state.runId!==id||!state.running)return;
@@ -1002,7 +1058,7 @@ async function runFrom(i){
     /* 回饋開啟時，代換/應答的升降盒交給 fbCheck 依辨識結果決定 */
     if(!(fbOn()&&state.mode!=="listen"))srsMark(srsIdOf(k),1);
   }
-  if(state.runId===id){state.running=false;$("btnStart").textContent="▶ 開始";setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");$("barFill").style.width="100%";}
+  if(state.runId===id){state.running=false;state.idx=0;$("btnStart").textContent="▶ 開始";$("barFill").style.width="100%";roundDone=true;finishRound();}
 }
 function stopRun(){state.running=false;state.runId++;stopAudio();$("btnStart").textContent="▶ 開始";}
 
@@ -1110,8 +1166,8 @@ function contour(track,N){
 }
 function segSlope(a){const n=a.length;let sx=0,sy=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=i;sy+=a[i];sxy+=i*a[i];sxx+=i*i;}const b=(n*sxy-sx*sy)/((n*sxx-sx*sx)||1);return b*(n-1);}
 function corrOf(a,b){const n=a.length;let ma=0,mb=0;for(let i=0;i<n;i++){ma+=a[i];mb+=b[i];}ma/=n;mb/=n;let c=0,va=0,vb=0;for(let i=0;i<n;i++){c+=(a[i]-ma)*(b[i]-mb);va+=(a[i]-ma)*(a[i]-ma);vb+=(b[i]-mb)*(b[i]-mb);}return c/Math.sqrt(va*vb+1e-9);}
-function drawPitch(A,B){
-  const cv=$("pitchCanvas");cv.style.display="";
+function drawPitch(A,B,cvEl){
+  const cv=cvEl||$("pitchCanvas");cv.style.display="";
   const c=cv.getContext("2d"),W=cv.width,H=cv.height;
   c.clearRect(0,0,W,H);
   const lo=-8,hi=8;
@@ -1162,13 +1218,14 @@ async function analyzePitch(){
 /* ================= UI 綁定 ================= */
 function fillLessons(){
   const sel=$("lessonSel");sel.innerHTML="";
-  LESSONS.forEach((L,i)=>{const o=document.createElement("option");o.value=i;o.textContent=L.t;sel.appendChild(o);});
+  LESSONS.forEach((L,i)=>{const o=document.createElement("option");o.value=i;o.textContent=L.t+scoreBadge(i);sel.appendChild(o);});
   if(state.customLesson){const o=document.createElement("option");o.value=-1;o.textContent="★ 自訂教材（"+state.customLesson.listen.length+" 句）";sel.appendChild(o);}
   sel.value=state.lesson;
   $("grammarInfo").textContent="文法重點：" + (curLesson()?curLesson().g:"");
 }
 function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
+  $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
   $("drillCard").style.display=(m==="rec"||m==="custom")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
