@@ -102,6 +102,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="qa">③ 應答</button>
     <button data-mode="build">④ 逐段累加</button>
     <button data-mode="rec">⑤ 錄音對比</button>
+    <button data-mode="minpair">⑥ 聽辨</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
 </div>
@@ -126,6 +127,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div id="fbArea" class="small" style="margin-top:6px;line-height:1.8;"></div>
   <canvas id="fbCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="fbPitchInfo" class="small" style="margin-top:4px;"></div>
+  <button id="fbReplaySeg" style="display:none;margin-top:4px;">🐢 重聽差最大的一段（半速）</button>
 </div>
 
 <div class="card" id="recCard" style="display:none;">
@@ -152,6 +154,21 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <canvas id="pitchCanvas" width="860" height="190" style="width:100%;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="pitchFeedback" class="small" style="margin-top:8px;line-height:1.9;"></div>
   <div class="status" id="recStatus"></div>
+</div>
+
+<div class="card" id="minPairCard" style="display:none;">
+  <b>聽辨訓練（最小對立組）</b>　<span class="small">聽一句，判斷是哪個詞——先聽得出高低差，嘴巴才修得動</span>
+  <div class="row" style="margin-top:12px;">
+    <button class="primary" id="mpPlay">🔊 出題</button>
+    <button id="mpAgain" disabled>🔁 再聽一次</button>
+  </div>
+  <div class="row" style="margin-top:12px;">
+    <button id="mpOptA" style="flex:1;min-height:52px;" disabled></button>
+    <button id="mpOptB" style="flex:1;min-height:52px;" disabled></button>
+  </div>
+  <div id="mpResult" style="margin-top:10px;line-height:1.9;"></div>
+  <div class="small" id="mpScore" style="margin-top:6px;"></div>
+  <div class="small" style="margin-top:8px;">重音標註為標準東京腔（↘＝音高下降處、‾＝平板不降）。語音由 TTS 合成，個別詞若與標註不符請回報。想大量刷題（含動詞、助詞接續）可用 kotu.io。</div>
 </div>
 
 <div class="card" id="customCard" style="display:none;">
@@ -844,8 +861,48 @@ async function fbPitch(blob,text){
     drawPitch(A.pts,B.pts,$("fbCanvas"));
     const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
     const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
-    $("fbPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%";
+    const hints=fbHints(A.pts,B.pts);
+    $("fbPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%"+(hints.length?"　💡 "+hints.join("、"):"");
+    /* 找差異最大的區段：標紅底＋提供半速切片重播（平均差 ≥2 半音才顯示） */
+    fbSeg=null;$("fbReplaySeg").style.display="none";
+    const wv=worstWindow(A.pts,B.pts);
+    if(wv&&wv.diff>=2){
+      const cv=$("fbCanvas"),c=cv.getContext("2d");
+      c.fillStyle="rgba(220,60,40,0.14)";
+      c.fillRect(wv.i0/(wv.n-1)*cv.width,0,(wv.i1-wv.i0)/(wv.n-1)*cv.width,cv.height);
+      fbSeg={url:url,t:A.t0+A.dur*wv.i0/(wv.n-1),d:A.dur*(wv.i1-wv.i0)/(wv.n-1)};
+      $("fbReplaySeg").style.display="";
+    }
   }catch(e){}
+}
+function fbHints(A,B){/* 把曲線差異翻譯成可執行的修正指令 */
+  const seg=(p,a,b)=>p.slice(Math.floor(p.length*a),Math.ceil(p.length*b));
+  const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const h=[];
+  const dHead=mean(seg(B,0,0.33))-mean(seg(A,0,0.33));
+  if(dHead>2)h.push("句首起音壓低一點");else if(dHead<-2)h.push("句首起音抬高一點");
+  const sA=segSlope(seg(A,0.7,1)),sB=segSlope(seg(B,0.7,1));
+  if(sA<-1.5&&sB>-0.3)h.push("句尾要降下來（示範是下降的）");
+  else if(sA>1.5&&sB<0.3)h.push("句尾要揚上去（疑問語調）");
+  else{const dTail=mean(seg(B,0.67,1))-mean(seg(A,0.67,1));if(Math.abs(dTail)>2.5)h.push(dTail>0?"句尾整體偏高":"句尾整體偏低");}
+  return h;
+}
+let fbSeg=null;
+function worstWindow(A,B){/* 8/48 點滑窗找平均半音差最大處 */
+  const n=Math.min(A.length,B.length),w=8;if(n<w)return null;
+  let bi=0,bd=-1;
+  for(let i=0;i+w<=n;i++){let s2=0;for(let j=i;j<i+w;j++)s2+=Math.abs(A[j]-B[j]);const m=s2/w;if(m>bd){bd=m;bi=i;}}
+  return{i0:bi,i1:bi+w-1,diff:bd,n:n};
+}
+function fbReplaySeg(){
+  const g=fbSeg;if(!g)return;
+  stopAudio();
+  const a=new Audio(g.url);currentAudio=a;
+  a.playbackRate=0.6;try{a.preservesPitch=true;}catch(e){}
+  a.currentTime=Math.max(0,g.t-0.15);
+  const end=g.t+g.d+0.15;
+  a.ontimeupdate=()=>{if(a.currentTime>=end)a.pause();};
+  a.play().catch(()=>{});
 }
 /* 正規化：去標點空白、全形轉半形，並歸一 Whisper 與教材常見的正字法差異（私/わたし、下さい/ください、阿拉伯數字/漢數字） */
 function fbNorm(s){return(s||"").replace(/[\s　。、．，？！?!「」『』（）()・…〜~]/g,"").replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/私/g,"わたし").replace(/下さい/g,"ください").replace(/[0-9]/g,d=>"〇一二三四五六七八九"[d]);}
@@ -1162,7 +1219,7 @@ function contour(track,N){
     for(let i=0;i<v.length;i++){const dd=Math.abs(v[i].t-tt);if(dd<bd){bd=dd;bi=i;}}
     pts.push(st[bi]);
   }
-  return{pts:pts,dur:dur};
+  return{pts:pts,dur:dur,t0:t0};
 }
 function segSlope(a){const n=a.length;let sx=0,sy=0,sxy=0,sxx=0;for(let i=0;i<n;i++){sx+=i;sy+=a[i];sxy+=i*a[i];sxx+=i*i;}const b=(n*sxy-sx*sy)/((n*sxx-sx*sx)||1);return b*(n-1);}
 function corrOf(a,b){const n=a.length;let ma=0,mb=0;for(let i=0;i<n;i++){ma+=a[i];mb+=b[i];}ma/=n;mb/=n;let c=0,va=0,vb=0;for(let i=0;i<n;i++){c+=(a[i]-ma)*(b[i]-mb);va+=(a[i]-ma)*(a[i]-ma);vb+=(b[i]-mb)*(b[i]-mb);}return c/Math.sqrt(va*vb+1e-9);}
@@ -1225,13 +1282,15 @@ function fillLessons(){
 }
 function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
-  $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";
+  $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
+  $("minPairCard").style.display=m==="minpair"?"":"none";
   if(m==="rec")fillRecSel();
-  if(m!=="rec"&&m!=="custom"){
+  if(m==="minpair")mpScoreShow();
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -1257,6 +1316,11 @@ $("testKey").onclick=async()=>{
   try{const url=await synthCloud("こんにちは。よろしくお願いします。");await playUrl(url);setStatus("ttsStatus","✅ Google Cloud TTS 連線成功！");}
   catch(e){setStatus("ttsStatus","❌ 失敗："+e.message);}
 };
+$("fbReplaySeg").onclick=fbReplaySeg;
+$("mpPlay").onclick=mpAsk;
+$("mpAgain").onclick=()=>{if(mp.cur)say(mp.cur.s[mp.side]);};
+$("mpOptA").onclick=()=>mpAnswer(0);
+$("mpOptB").onclick=()=>mpAnswer(1);
 $("recSel").onchange=showRecSentence;
 $("recBtn").onclick=toggleRec;
 $("recModel").onclick=playModel;
@@ -1284,6 +1348,42 @@ $("fbChk").onchange=async()=>{
   try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});$("fbArea").textContent="🎤 正誤回饋已開啟：代換・應答留白時會錄音並比對";}
   catch(e){$("fbChk").checked=false;$("fbArea").textContent="⚠ 無法使用麥克風："+e.message;}
 };
+
+/* ================= 聽辨訓練（最小對立組，標準東京腔） ================= */
+const MINPAIRS=[
+{s:["箸です。","橋です。"],o:[{jp:"箸",acc:"は↘し（頭高①）",cn:"筷子"},{jp:"橋",acc:"はし↘（尾高②）",cn:"橋"}]},
+{s:["雨です。","飴です。"],o:[{jp:"雨",acc:"あ↘め（頭高①）",cn:"雨"},{jp:"飴",acc:"あめ‾（平板⓪）",cn:"糖果"}]},
+{s:["神です。","紙です。"],o:[{jp:"神",acc:"か↘み（頭高①）",cn:"神"},{jp:"紙",acc:"かみ↘（尾高②）",cn:"紙"}]},
+{s:["牡蠣です。","柿です。"],o:[{jp:"牡蠣",acc:"か↘き（頭高①）",cn:"牡蠣"},{jp:"柿",acc:"かき‾（平板⓪）",cn:"柿子"}]},
+{s:["鮭です。","酒です。"],o:[{jp:"鮭",acc:"さ↘け（頭高①）",cn:"鮭魚"},{jp:"酒",acc:"さけ‾（平板⓪）",cn:"酒"}]},
+{s:["腿です。","桃です。"],o:[{jp:"腿",acc:"も↘も（頭高①）",cn:"大腿"},{jp:"桃",acc:"もも‾（平板⓪）",cn:"桃子"}]},
+{s:["白です。","城です。"],o:[{jp:"白",acc:"し↘ろ（頭高①）",cn:"白色"},{jp:"城",acc:"しろ‾（平板⓪）",cn:"城堡"}]}
+];
+let mp={cur:null,side:0,n:0,ok:0,answered:true};
+let mpHist={n:0,ok:0};try{mpHist=JSON.parse(store.get("fsi_minpair",'{"n":0,"ok":0}'))||mpHist;}catch(e){}
+function mpScoreShow(){$("mpScore").textContent="本次 "+mp.ok+"/"+mp.n+(mpHist.n?("　·　歷史正確率 "+Math.round(mpHist.ok/mpHist.n*100)+"%（共 "+mpHist.n+" 題）"):"");}
+async function mpAsk(){
+  mp.cur=MINPAIRS[Math.floor(Math.random()*MINPAIRS.length)];
+  mp.side=Math.random()<0.5?0:1;mp.answered=false;
+  $("mpResult").textContent="";
+  const o=mp.cur.o;
+  $("mpOptA").textContent=o[0].jp+"　"+o[0].acc+"　"+o[0].cn;
+  $("mpOptB").textContent=o[1].jp+"　"+o[1].acc+"　"+o[1].cn;
+  $("mpOptA").disabled=$("mpOptB").disabled=false;$("mpAgain").disabled=false;
+  await say(mp.cur.s[mp.side]);
+  $("mpPlay").textContent="▶ 下一題";
+}
+async function mpAnswer(i){
+  if(mp.answered||!mp.cur)return;
+  mp.answered=true;$("mpOptA").disabled=$("mpOptB").disabled=true;
+  const hit=i===mp.side;mp.n++;if(hit)mp.ok++;
+  mpHist.n++;if(hit)mpHist.ok++;store.set("fsi_minpair",JSON.stringify(mpHist));
+  const o=mp.cur.o,head=hit?"✅ 正確！":"❌ 是「"+o[mp.side].jp+"」（"+o[mp.side].acc+"）";
+  mpScoreShow();
+  $("mpResult").textContent=head+"　對比聽…";
+  await say(mp.cur.s[0]);await new Promise(r=>setTimeout(r,400));await say(mp.cur.s[1]);
+  $("mpResult").textContent=head+"　已對比播放："+o[0].jp+" → "+o[1].jp+"。按「下一題」繼續。";
+}
 
 /* ================= 初始化 ================= */
 (function init(){
