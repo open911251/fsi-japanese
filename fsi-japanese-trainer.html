@@ -45,6 +45,23 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 <h1>FSI 日語訓練工具 <span class="pill">聽 → 說 → 反覆操練</span></h1>
 <div class="tag">FSI 口語操練法：先聽不看字、跟讀、代換、應答、逐段累加。搭配 Google Cloud TTS 日語語音。</div>
 
+<div class="card" id="todayCard" style="display:none;">
+  <div class="row" style="align-items:center;gap:14px;flex-wrap:wrap;">
+    <b id="tdStreak"></b>
+    <span id="tdReview"></span>
+    <span id="tdLast"></span>
+    <span id="tdMp"></span>
+  </div>
+  <div class="row small" style="margin-top:8px;gap:16px;flex-wrap:wrap;align-items:center;">
+    今日：
+    <span class="opt"><input type="checkbox" id="ckDrill" disabled> 操練</span>
+    <span class="opt"><input type="checkbox" id="ckAnki"> <span id="ckAnkiTxt" style="cursor:pointer;border-bottom:1px dotted;">Anki 詞彙</span></span>
+    <span class="opt"><input type="checkbox" id="ckListen"> <span id="ckListenTxt" style="cursor:pointer;border-bottom:1px dotted;">真實聽力 30 分</span></span>
+    <a href="https://github.com/open911251/fsi-japanese/blob/main/STUDY-GUIDE.md" target="_blank" rel="noopener" class="small">完整指南</a>
+  </div>
+  <div id="tdPanel" class="small" style="display:none;margin-top:8px;line-height:1.9;border:1px solid var(--line);border-radius:8px;padding:8px 10px;"></div>
+</div>
+
 <div class="card">
   <div class="row">
     <input type="password" id="apiKey" placeholder="Google Cloud TTS API Key（留空則用瀏覽器內建語音）" style="flex:1;min-width:220px;">
@@ -1013,6 +1030,7 @@ function scoreBadge(i){/* 取已練模式中較弱的一項當精熟度下限 */
   return b>=75?"　✅"+b+"%":"　⚠"+b+"%";
 }
 function finishRound(){/* 回合結算；遲到的 STT 結果會再次呼叫以更新 */
+  markPractice();
   const v=roundVerdict(roundStats);
   if(!v||(state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="build")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
   scoreSave(v);
@@ -1376,6 +1394,10 @@ $("testKey").onclick=async()=>{
   catch(e){setStatus("ttsStatus","❌ 失敗："+e.message);}
 };
 $("fbReplaySeg").onclick=fbReplaySeg;
+$("ckAnki").onchange=()=>{daily.anki=$("ckAnki").checked;dailySave();};
+$("ckListen").onchange=()=>{daily.listen=$("ckListen").checked;dailySave();};
+$("ckAnkiTxt").onclick=()=>tdPanel("anki");
+$("ckListenTxt").onclick=()=>tdPanel("listen");
 $("mpPlay").onclick=mpAsk;
 $("mpAgain").onclick=()=>{if(mp.cur)say(mp.cur.s[mp.side]);};
 $("mpOptA").onclick=()=>mpAnswer(0);
@@ -1437,11 +1459,62 @@ async function mpAnswer(i){
   mp.answered=true;$("mpOptA").disabled=$("mpOptB").disabled=true;
   const hit=i===mp.side;mp.n++;if(hit)mp.ok++;
   mpHist.n++;if(hit)mpHist.ok++;store.set("fsi_minpair",JSON.stringify(mpHist));
+  daily.mp=true;dailySave();todayRender();
   const o=mp.cur.o,head=hit?"✅ 正確！":"❌ 是「"+o[mp.side].jp+"」（"+o[mp.side].acc+"）";
   mpScoreShow();
   $("mpResult").textContent=head+"　對比聽…";
   await say(mp.cur.s[0]);await new Promise(r=>setTimeout(r,400));await say(mp.cur.s[1]);
   $("mpResult").textContent=head+"　已對比播放："+o[0].jp+" → "+o[1].jp+"。按「下一題」繼續。";
+}
+
+/* ================= 今日條（狀態驅動的每日待辦） ================= */
+function todayKey(){const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
+let daily={};try{daily=JSON.parse(store.get("fsi_daily","{}"))||{};}catch(e){}
+if(daily.day!==todayKey())daily={day:todayKey(),drill:false,anki:false,listen:false,mp:false};
+let streakD={last:"",n:0};try{streakD=JSON.parse(store.get("fsi_streak",'{"last":"","n":0}'))||streakD;}catch(e){}
+function dailySave(){store.set("fsi_daily",JSON.stringify(daily));store.set("fsi_streak",JSON.stringify(streakD));}
+function markPractice(){/* 完成一輪操練＝今天有練，維護連續天數 */
+  daily.drill=true;
+  const t=todayKey();
+  if(streakD.last!==t){
+    const y=new Date();y.setDate(y.getDate()-1);
+    const yk=y.getFullYear()+"-"+(y.getMonth()+1)+"-"+y.getDate();
+    streakD.n=(streakD.last===yk)?streakD.n+1:1;
+    streakD.last=t;
+  }
+  dailySave();todayRender();
+}
+function srsDueAll(){
+  const now=Date.now();const by={listen:0,sub:0,qa:0};let tot=0;
+  Object.keys(srs).forEach(k=>{if(srs[k].due<=now){const m=k.split("|")[0];if(by[m]!=null){by[m]++;tot++;}}});
+  return{tot:tot,by:by};
+}
+function lastPracticed(){
+  let best=null;
+  Object.keys(scores).forEach(l=>{["sub","qa","build"].forEach(m=>{const e=scores[l]&&scores[l][m];if(e&&e.t&&(!best||e.t>best.t))best={lesson:parseInt(l),mode:m,last:e.last,t:e.t};});});
+  return best;
+}
+const TD_MODENAME={listen:"聽讀",sub:"代換",qa:"應答",build:"逐段"};
+function todayRender(){
+  $("todayCard").style.display="";
+  $("tdStreak").textContent=streakD.n>0?("🔥 連續 "+streakD.n+" 天"):"🌱 今天開始";
+  const d=srsDueAll();
+  $("tdReview").innerHTML=d.tot?("🔁 到期複習 "+d.tot+" 句 <button id='tdGoReview'>開始</button>"):"✅ 沒有到期複習";
+  const lp=lastPracticed();
+  $("tdLast").innerHTML=(lp&&LESSONS[lp.lesson])?("上次："+LESSONS[lp.lesson].t.split(" ")[0]+" "+TD_MODENAME[lp.mode]+" "+lp.last+"% <button id='tdGoLast'>"+(lp.last>=75?"繼續":"重練")+"</button>"):"";
+  $("tdMp").innerHTML=daily.mp?"👂 聽辨 ✓":"👂 聽辨還沒做 <button id='tdGoMp'>來幾題</button>";
+  $("ckDrill").checked=!!daily.drill;$("ckAnki").checked=!!daily.anki;$("ckListen").checked=!!daily.listen;
+  const r=$("tdGoReview");if(r)r.onclick=()=>{const by=srsDueAll().by;switchMode(Object.keys(by).sort((a,b)=>by[b]-by[a])[0]);runFrom(0);};
+  const l=$("tdGoLast");if(l)l.onclick=()=>{state.lesson=lp.lesson;fillLessons();switchMode(lp.mode);runFrom(0);};
+  const m=$("tdGoMp");if(m)m.onclick=()=>{switchMode("minpair");mpAsk();};
+}
+function tdPanel(which){/* 漸進揭露：點文字才展開工具建議，點方框只打勾 */
+  const p=$("tdPanel");
+  if(p.dataset.w===which&&p.style.display!=="none"){p.style.display="none";p.dataset.w="";return;}
+  p.dataset.w=which;p.style.display="";
+  if(which==="anki")p.innerHTML="📇 詞彙卡片 10–15 分：Anki 或 jpdb 擇一，跑生活高頻詞庫。　<a href='https://apps.ankiweb.net/' target='_blank' rel='noopener'>Anki</a>｜<a href='https://jpdb.io/' target='_blank' rel='noopener'>jpdb.io</a>　<button id='tdDone'>完成了 ✓</button>";
+  else p.innerHTML="🎧 真實聽力 30 分：日劇／vlog／廣播挑一個看完。<b>卡住的句子複製下來 → 回來貼「＋自訂教材」操練。</b>　<a href='https://www.nhk.or.jp/radionews/' target='_blank' rel='noopener'>NHK ラジオニュース</a>｜<a href='https://www.youtube.com/results?search_query=%E6%97%A5%E6%9C%AC%E8%AA%9E+vlog' target='_blank' rel='noopener'>YouTube vlog</a>　<button id='tdDone'>完成了 ✓</button>";
+  $("tdDone").onclick=()=>{daily[which]=true;dailySave();p.style.display="none";p.dataset.w="";todayRender();};
 }
 
 /* ================= 初始化 ================= */
@@ -1457,7 +1530,7 @@ async function mpAnswer(i){
     const lines=c.split("\n").map(s=>s.trim()).filter(Boolean);
     if(lines.length){const listen=lines.map(l=>{const p=l.split(/[|｜]/);return[p[0].trim(),"",(p[1]||"").trim()];});
       state.customLesson={t:"自訂教材",g:"自訂內容",listen,sub:[],qa:[],build:null};}}
-  fillLessons();updateProg();
+  fillLessons();updateProg();todayRender();
   if(window.speechSynthesis)speechSynthesis.getVoices();
 })();
 </script>

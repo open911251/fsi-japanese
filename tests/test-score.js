@@ -16,6 +16,7 @@ const env = new Function(lessons + `
   let lastStatus="";
   function setStatus(id,msg){lastStatus=msg;}
   function fillLessons(){}
+  function markPractice(){}
   const $=id=>({});
   ${blk}
   return {roundVerdict,scoreSave,scoreBadge,finishRound,scores,state,
