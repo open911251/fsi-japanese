@@ -1,0 +1,7 @@
+# bot 執行期資料：token、對話記憶、視窗紀錄、錯誤句收集——絕不 commit
+bot/data/
+bot/*.env
+bot/config.json
+bot/relay/node_modules/
+bot/relay/package-lock.json
+bot/__pycache__/

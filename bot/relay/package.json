@@ -1,0 +1,14 @@
+{
+  "name": "fsi-bot-voice-relay",
+  "private": true,
+  "description": "Discord 語音收發中繼（DAVE 相容），大腦在 ../bot.py",
+  "main": "relay.js",
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.2",
+    "@snazzah/davey": "^0.1.12",
+    "discord.js": "^14.27.0",
+    "libsodium-wrappers": "^0.8.4",
+    "prism-media": "^1.3.5"
+  }
+}

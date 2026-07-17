@@ -2,7 +2,7 @@
 
 基於 FSI（美國外交學院）口語操練法的日語自學工具，串接 Google Cloud Text-to-Speech 日語語音。單一 HTML 檔，開網頁即用，支援手機。
 
-本工具只負責口說操練；工具之外該做的練習與推薦工具見 [STUDY-GUIDE.md](STUDY-GUIDE.md)。
+本工具只負責口說操練；工具之外該做的練習與推薦工具見 [STUDY-GUIDE.md](STUDY-GUIDE.md)，文法書逐課對照（出口仁《大家學標準日本語》）見 [GRAMMAR-MAP.md](GRAMMAR-MAP.md)。
 
 ## 功能
 
@@ -20,11 +20,12 @@
 - **操練中腔調圖**：開啟正誤回饋後，跟讀／代換／應答／逐段說完當下直接在操練畫面畫出你與示範的音高曲線對比（相似度＋語速差），附文字修正建議（「句尾要降下來」）；差異最大的區段會標紅，可一鍵半速重聽該段
 - **卡拉OK式即時跟唱**：開口的當下，示範曲線是軌道、你的音高即時畫上去、游標跟著掃——邊說邊看邊修，不用等說完才看結果
 - **今日條**：開站第一眼回答「今天該做什麼」——連續天數、到期複習數（一鍵開始）、上次進度（一鍵繼續／重練）、聽辨提醒，加上含 Anki／真實聽力的自勾清單（點文字展開工具建議，點方框打勾）
-- **⑥ 聽辨訓練**：最小對立組測驗（箸／橋、雨／飴…），聽 TTS 判斷是哪個詞，答錯立即對比播放——先聽得出高低差，發音才修得動
+- **⑥ 聽辨訓練**：最小對立組測驗（箸／橋、雨／飴…），聽 TTS 判斷是哪個詞，答錯立即對比播放——先聽得出高低差，發音才修得動；另有「重音位置」分頁（實驗性，需 VOICEVOX），任一詞皆可出題，二選一挑出標準重音
+- **符號級腔調評分（選用，需 VOICEVOX）**：填了 VOICEVOX endpoint 後，腔調回饋與錄音對比會多一排逐拍高低標註（哪個字讀錯一眼看出），畫布疊一條理論高低軌，跟唱畫面也會疊上去
 
 ## 自架 STT／LLM（選用）
 
-「本地 AI 設定」可填 OpenAI 相容的 STT／LLM endpoint（如工作站上的 faster-whisper server、Ollama）。遠端機器用 `ssh -L` 把埠轉發到 localhost 即可——瀏覽器允許 HTTPS 頁面連 localhost，不需要另外弄憑證。腔調分析不走 STT（Whisper 會丟棄韻律），維持音高曲線對比。
+「本地 AI 設定」可填 OpenAI 相容的 STT／LLM endpoint（如工作站上的 faster-whisper server、Ollama），也可填 VOICEVOX endpoint 做符號級腔調評分。遠端機器用 `ssh -L` 把埠轉發到 localhost 即可——瀏覽器允許 HTTPS 頁面連 localhost，不需要另外弄憑證。VOICEVOX engine 需以 `--cors_policy_mode all` 啟動才允許瀏覽器跨源呼叫。腔調曲線分析不走 STT（Whisper 會丟棄韻律），維持音高曲線對比；VOICEVOX 是額外疊加的逐拍符號分析，非必填。
 
 現成的後端在 `server/`：一個 FastAPI 同時提供 Whisper 辨識與 Ollama 反向代理（自動補 CORS，不用改 Ollama 設定），只綁 127.0.0.1。部署：裝好 venv 依賴（`faster-whisper fastapi uvicorn python-multipart httpx`，GPU 加 `nvidia-cublas-cu12 nvidia-cudnn-cu12`）後 `tmux new -d -s fsi ./start.sh`。
 

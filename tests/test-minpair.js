@@ -11,17 +11,30 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
 // MINPAIRS 資料完整性
 const mpBlk = script.slice(script.indexOf("const MINPAIRS=["), script.indexOf("];", script.indexOf("const MINPAIRS=[")) + 2);
 const MINPAIRS = new Function(mpBlk + "; return MINPAIRS;")();
-check(MINPAIRS.length >= 6, "至少 6 組對立組（目前 " + MINPAIRS.length + "）");
+check(MINPAIRS.length >= 25, "至少 25 組對立組（目前 " + MINPAIRS.length + "）");
 let ok = true;
+const pitchMark = a => a.includes("↘") || a.includes("‾");
+const segMark = a => /長音|短音|促音|清音|濁音|拗音|直音/.test(a); // 音段對立組用類別標記
 MINPAIRS.forEach((p, i) => {
   if (!Array.isArray(p.s) || p.s.length !== 2 || !Array.isArray(p.o) || p.o.length !== 2) { ok = false; return; }
   p.o.forEach((o, j) => {
     if (!o.jp || !o.acc || !o.cn) ok = false;
-    if (!p.s[j].includes(o.jp)) ok = false; // 句子必須含該選項的漢字（TTS 靠漢字選重音）
+    if (!p.s[j].includes(o.jp)) ok = false; // 句子必須含該選項的字（TTS 靠它選發音）
   });
-  if (!(p.o[0].acc.includes("↘") || p.o[0].acc.includes("‾")) || !(p.o[1].acc.includes("↘") || p.o[1].acc.includes("‾"))) ok = false;
+  if (!((pitchMark(p.o[0].acc) && pitchMark(p.o[1].acc)) || (segMark(p.o[0].acc) && segMark(p.o[1].acc)))) ok = false;
 });
-check(ok, "每組：2 句、2 選項、句含對應漢字、重音標記齊全");
+check(ok, "每組：2 句、2 選項、句含對應字、標記齊全（重音符號或音段類別）");
+
+// mpPick 加權抽題：答錯率高的組被抽中機率應高於均勻
+const pickBlk = script.slice(script.indexOf("function mpKey"), script.indexOf("let mp={"));
+const mkPick = new Function("MINPAIRS", "mpHist", pickBlk + "; return mpPick;");
+const hist = { g: {} };
+MINPAIRS.forEach((p, i) => { hist.g[p.o[0].jp + "|" + p.o[1].jp] = { n: 10, ok: i === 0 ? 0 : 10 }; });
+const pick = mkPick(MINPAIRS, hist);
+let hit0 = 0;
+for (let i = 0; i < 2000; i++) if (pick() === MINPAIRS[0]) hit0++;
+check(hit0 / 2000 > 2 / MINPAIRS.length, "全錯的組抽中率超過均勻兩倍（實測 " + (hit0 / 20).toFixed(1) + "%）");
+check(mkPick(MINPAIRS, { g: {} })() != null, "無歷史紀錄時也能抽題");
 
 // fbHints：曲線差異 → 文字修正建議
 const hintsBlk = script.slice(script.indexOf("function fbHints"), script.indexOf("let fbSeg"));
