@@ -105,6 +105,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
       <input type="text" id="vvUrl" placeholder="VOICEVOX URL（例 http://localhost:50021，選用：符號級腔調評分）" style="flex:2;min-width:220px;">
       <input type="text" id="vvSpeaker" placeholder="speaker id（預設 8）" style="flex:1;min-width:100px;">
       <button id="vvTest">測試</button>
+      <button id="vvSelf">🧪 評分自檢</button>
     </div>
     <div class="small" id="vvStatus" style="margin-top:4px;"></div>
     <div class="row" style="margin-top:6px;">
@@ -1003,6 +1004,55 @@ function moraScoreAligned(uC,ref,moras){/* DTW 版逐拍評分：把使用者曲
     return{kana:m.kana,voiced:true,expect:m.hilo,got:got,match:got===m.hilo};
   });
 }
+async function vvRecalc(aq,pi,a){/* 改 accent 後必須用 /mora_data 重算每拍音高——
+   /synthesis 只讀 moras[].pitch、不看 accent 欄位（實測：只改 accent 合成音 MD5 不變） */
+  const c=JSON.parse(JSON.stringify(aq));
+  c.accent_phrases[pi].accent=a;
+  const r=await fetch(vvBase()+"/mora_data?speaker="+vvSpk(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.accent_phrases)});
+  if(!r.ok)throw new Error("VOICEVOX mora_data HTTP "+r.status);
+  c.accent_phrases=await r.json();
+  return c;
+}
+async function selfPipe(text,aqAudio,morasRef){/* 把合成音當假使用者錄音，跑正式評分管線 */
+  const url=await vvSynthesize(aqAudio);
+  try{
+    const uC=contour(pitchTrack(await decodeUrl(url)),48);
+    return uC?await vvScore(text,uC,morasRef):null;
+  }finally{URL.revokeObjectURL(url);}
+}
+async function vvSelfTest(){/* 已知答案自檢：正確重音合成音該全綠、改錯重音的拍該紅——量化評分管線的可信度 */
+  if(!vvOn()){setStatus("vvStatus","請先填 VOICEVOX URL");return;}
+  const el=$("vvStatus");
+  $("vvSelf").disabled=true;
+  let gOk=0,gTot=0,rOk=0,rTot=0;const miss=[];
+  try{
+    for(let i=0;i<ACCENT_WORDS.length;i++){
+      const w=ACCENT_WORDS[i];
+      el.textContent="🧪 自檢中… "+(i+1)+"/"+ACCENT_WORDS.length+"（"+w+"）";
+      const text=w+"です。";
+      const aq=await vvQuery(text);
+      const ph0=aq.accent_phrases[0],n=ph0.moras.length,correct=ph0.accent;
+      const wrong=correct===1?(n-1):1;/* 固定規則（可重現）：頭高↔平板位，音高差異最大 */
+      const morasC=vvMoras(aq);
+      const wrongAq=await vvRecalc(aq,0,wrong);
+      const morasW=vvMoras(wrongAq);
+      const s1=await selfPipe(text,aq,morasC);/* 正確版：該全綠 */
+      if(s1)s1.forEach(s=>{if(s.voiced&&s.got){gTot++;if(s.match)gOk++;}});
+      const s2=await selfPipe(text,wrongAq,morasC);/* 錯誤版：hilo 有變的拍該紅 */
+      if(s2)s2.forEach((s,k)=>{
+        if(s.voiced&&s.got&&morasW[k]&&morasW[k].voiced&&morasW[k].hilo!==morasC[k].hilo){
+          rTot++;
+          if(!s.match)rOk++;else miss.push(w+"・"+s.kana);
+        }
+      });
+    }
+    const gr=gTot?Math.round(gOk/gTot*100):0,rr=rTot?Math.round(rOk/rTot*100):0;
+    el.innerHTML="🧪 自檢完成（合成音＝乾淨上界）：正確版綠率 <b>"+gr+"%</b>（"+gOk+"/"+gTot+"，目標≥90）／錯誤版抓錯率 <b>"+rr+"%</b>（"+rOk+"/"+rTot+"，目標≥80）"+
+      (miss.length?"<br>漏抓的拍："+miss.slice(0,12).join("、")+(miss.length>12?"…":""):"")+
+      "<br>兩項達標＝評分邏輯可信，剩下的誤差來自麥克風與你的實際發音。";
+  }catch(e){el.textContent="🧪 自檢失敗："+e.message;}
+  $("vvSelf").disabled=false;
+}
 async function vvScore(text,uC,moras){/* 評分入口：優先 DTW 對齊，合成/解碼失敗時退回比例對齊 */
   if(!moras||!uC)return null;
   try{const ref=await vvRef(text);if(ref){const r=moraScoreAligned(uC,ref,moras);if(r)return r;}}catch(e){}
@@ -1660,6 +1710,7 @@ $("customLoad").onclick=()=>{
 ["showJp","showKana","showCn"].forEach(id=>$(id).onchange=()=>{const a=items()[state.idx];updateProg();});
 $("shuffleOrd").onchange=()=>{stopRun();shufSeed++;state.idx=0;store.set("fsi_shuffle",$("shuffleOrd").checked?"1":"0");updateProg();};
 [["sttUrl","fsi_stt_url"],["sttModel","fsi_stt_model"],["llmUrl","fsi_llm_url"],["llmModel","fsi_llm_model"],["vvUrl","fsi_vv_url"],["vvSpeaker","fsi_vv_speaker"]].forEach(([id,k])=>$(id).onchange=()=>{store.set(k,$(id).value.trim());vvCache.clear();vvRefCache.clear();liveCache.clear();});
+$("vvSelf").onclick=vvSelfTest;
 $("vvTest").onclick=async()=>{
   setStatus("vvStatus","測試中…");
   if(!vvOn()){setStatus("vvStatus","請先填 VOICEVOX URL");return;}
@@ -1816,9 +1867,9 @@ async function apAsk(){
     if(n<2){$("apPlay").disabled=false;await apAsk();return;}/* 單拍詞沒有可比較的錯誤重音位置，重抽 */
     let wrong=correct;
     while(wrong===correct)wrong=Math.floor(Math.random()*(n+1));
-    const mk=a=>{const c=JSON.parse(JSON.stringify(aq0));c.accent_phrases[0].accent=a;return c;};
     const correctSide=Math.random()<0.5?0:1;
-    const uCorrect=await vvSynthesize(mk(correct)),uWrong=await vvSynthesize(mk(wrong));
+    /* 正確版直接用原 aq；錯誤版改 accent 後必須經 /mora_data 重算音高（否則合成音跟正確版一模一樣） */
+    const uCorrect=await vvSynthesize(aq0),uWrong=await vvSynthesize(await vvRecalc(aq0,0,wrong));
     const urls=correctSide===0?[uCorrect,uWrong]:[uWrong,uCorrect];
     ap.cur={word,kana:ph0.moras.map(m=>m.text).join(""),n,correct,wrong,correctSide,urls};
     ap.answered=false;
