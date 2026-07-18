@@ -107,6 +107,10 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
       <button id="vvTest">測試</button>
     </div>
     <div class="small" id="vvStatus" style="margin-top:4px;"></div>
+    <div class="row" style="margin-top:6px;">
+      <button id="wsTest">🔌 測試工作站連線（STT／LLM／VOICEVOX）</button>
+    </div>
+    <div class="small" id="wsStatus" style="margin-top:4px;line-height:1.8;"></div>
     <div style="margin-top:6px;line-height:1.7;" class="small">
       接自己工作站的 Whisper／LLM（OpenAI 相容 API）。遠端機器用 <b>ssh -L 埠轉發</b>到 localhost 即可，瀏覽器允許 HTTPS 頁面連 localhost。伺服器需允許 CORS（Ollama 設 <b>OLLAMA_ORIGINS=*</b>；faster-whisper 可用 speaches 等 server；VOICEVOX engine 需加 <b>--cors_policy_mode all</b>）。設定只存在瀏覽器。<br>
       填了 VOICEVOX 後，腔調回饋會多一排逐拍高低標註（比對音高曲線更準的符號級評分，取自 VOICEVOX 對句子的重音分析），跟唱與錄音對比的畫布也會疊一條理論高低軌。沒填就照舊只有曲線比對。
@@ -1589,6 +1593,52 @@ $("vvTest").onclick=async()=>{
     const moras=vvMoras(aq);
     setStatus("vvStatus","✅ 連線成功，"+moras.length+" 拍："+moras.map(m=>m.kana).join(""));
   }catch(e){setStatus("vvStatus","❌ 失敗："+e.message+"（引擎需加 --cors_policy_mode all 啟動；只填了 STT/LLM 而沒填這欄，腔調回饋一樣能用，只是沒有逐拍評分）");}
+};
+$("wsTest").onclick=async()=>{/* 一鍵檢查三個工作站端點；隧道沒開在這裡就會知道，不用等錄音失敗 */
+  $("wsStatus").innerHTML="⏳ 測試中…";
+  const out=[];
+  const stt=$("sttUrl").value.trim();
+  if(!stt)out.push("🎙 STT：未填");
+  else{
+    let msg="";
+    try{/* 自架 server 有 /health 回模型與裝置資訊；其他 OpenAI 相容 server 沒有就退回一般探測 */
+      const h=await fetch(new URL(stt).origin+"/health").then(r=>r.ok?r.json():null).catch(()=>null);
+      if(h&&h.stt_model)msg="✅ 連線成功（"+h.stt_model+"・"+h.device+"）";
+    }catch(e){}
+    if(!msg){
+      try{const r=await fetch(stt,{method:"OPTIONS"});msg="✅ 有回應（HTTP "+r.status+"，實際辨識以錄音為準）";}
+      catch(e){msg="❌ 連不上（隧道沒開？ssh -L 埠轉發後重試；或伺服器未允許 CORS）";}
+    }
+    out.push("🎙 STT："+msg);
+  }
+  const llm=$("llmUrl").value.trim();
+  if(!llm)out.push("🧠 LLM：未填");
+  else{
+    let msg="";
+    const mu=llm.replace(/\/chat\/completions\/?$/,"/models");
+    if(mu!==llm){/* OpenAI 相容 server 一定有 /v1/models，順便驗模型名 */
+      try{
+        const r=await fetch(mu);
+        if(r.ok){
+          const ids=((await r.json()).data||[]).map(m=>m.id);
+          const want=$("llmModel").value.trim();
+          msg="✅ 連線成功（"+ids.length+" 個模型"+(want?(ids.includes(want)?"，含 "+want:"，⚠ 清單裡找不到「"+want+"」"):"")+"）";
+        }
+      }catch(e){}
+    }
+    if(!msg){
+      try{const r=await fetch(llm,{method:"OPTIONS"});msg="✅ 有回應（HTTP "+r.status+"）";}
+      catch(e){msg="❌ 連不上（隧道沒開？或伺服器未允許 CORS）";}
+    }
+    out.push("🧠 LLM："+msg);
+  }
+  const vv=$("vvUrl").value.trim();
+  if(!vv)out.push("🗣 VOICEVOX：未填（選用）");
+  else{
+    try{const v=await(await fetch(vvBase()+"/version")).json();out.push("🗣 VOICEVOX：✅ 連線成功（v"+v+"）");}
+    catch(e){out.push("🗣 VOICEVOX：❌ 連不上或 CORS 未開（引擎需 --cors_policy_mode all）");}
+  }
+  $("wsStatus").innerHTML=out.join("<br>");
 };
 $("prevChk").onchange=()=>{stopRun();state.idx=0;store.set("fsi_preview",$("prevChk").checked?"1":"0");updateProg();};
 $("fbChk").onchange=async()=>{
