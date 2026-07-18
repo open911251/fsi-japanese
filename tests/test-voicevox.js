@@ -11,8 +11,8 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
 // 抽出 VOICEVOX 音高分析區塊（vvMoras／accentLabel／moraScore／circ）
 const blk = script.slice(script.indexOf("/* ================= VOICEVOX 音高分析"),
                           script.indexOf("/* ================= 正誤回饋"));
-const { vvMoras, accentLabel, apWordLabel, moraScore } = new Function(
-  blk + "; return {vvMoras, accentLabel, apWordLabel, moraScore};")();
+const { vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned } = new Function(
+  blk + "; return {vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned};")();
 
 // ---- accentLabel：頭高／尾高／平板／中高／超出符號表的 fallback ----
 check(accentLabel(2, 1) === "頭高①", "2拍・核在1 → 頭高①");
@@ -99,6 +99,45 @@ const ds = moraScore(declinePts, declineMoras);
 check(ds[2].got === "H" && ds[2].match === true, "下傾句後段的相對高拍 → 按 phrase 門檻正確判 H（全句門檻會誤判 L）");
 check(ds[3].got === "L" && ds[3].match === true, "同 phrase 的相對低拍 → 判 L");
 check(ds[0].got === "H" && ds[1].got === "H", "前段 phrase 兩拍等值 → 都判 H（>=該 phrase 平均）");
+
+// ---- dtwPath：基本對齊性質 ----
+const eq = dtwPath([0, 1, 2, 3], [0, 1, 2, 3]);
+check(eq.length === 4 && eq.every(p => p[0] === p[1]), "相同序列 → 對角線路徑");
+const shifted = dtwPath([0, 0, 5, 0, 0], [0, 0, 0, 5, 0]);
+check(shifted.some(p => p[0] === 2 && p[1] === 3), "尖峰位移 → 路徑把 ref 的峰(2)對到 user 的峰(3)");
+check(shifted[0][0] === 0 && shifted[0][1] === 0, "路徑從 (0,0) 出發");
+const last = shifted[shifted.length - 1];
+check(last[0] === 4 && last[1] === 4, "路徑收在兩序列的終點");
+
+// ---- moraScoreAligned：使用者節奏偏離時，DTW 不像比例切拍那樣錯位 ----
+// 頭高 4 拍（H,L,L,L），參考音第 1 拍佔 1/4；使用者把第 1 拍拖到超過一半時長。
+// 比例對齊：第 2 拍的取值窗整個落在使用者還在唸第 1 拍（高音）的區段 → 誤判 H（該低讀高的假錯誤）。
+// DTW 按曲線形狀對齊，高段全部歸給第 1 拍 → 第 2 拍正確判 L。
+const refPts = new Array(24).fill(0).map((_, i) => (i < 6 ? 3 : -3));
+const quarters = [[0, 0.25], [0.25, 0.5], [0.5, 0.75], [0.75, 1]];
+const ref = { C: { pts: refPts, t0: 0, dur: 1 }, spans: quarters };
+const fourMoras = ["ハ", "シ", "ミ", "ヤ"].map((k, i) => (
+  { kana: k, voiced: true, hilo: i === 0 ? "H" : "L", t0: quarters[i][0], t1: quarters[i][1], ph: 0 }));
+const dragged = { pts: new Array(24).fill(0).map((_, i) => (i < 13 ? 3 : -3)) }; // 第1拍拖長到 54%
+const aligned = moraScoreAligned(dragged, ref, fourMoras);
+check(aligned[0].got === "H" && aligned[0].match === true, "拖長的第1拍 → DTW 正確判 H");
+check(aligned[1].got === "L" && aligned[1].match === true, "第2拍 → DTW 正確判 L（高段全歸第1拍）");
+check(aligned[2].match === true && aligned[3].match === true, "第3、4拍 → 都正確");
+const prop = moraScore(dragged.pts, fourMoras);
+check(prop[1].got === "H" && prop[1].match === false, "（對照）比例對齊把第2拍誤判成 H——這就是要上 DTW 的原因");
+
+// ---- moraScoreAligned：貼著門檻的拍標 ≈、不算錯 ----
+const twoMoras = [
+  { kana: "ハ", voiced: true, hilo: "H", t0: 0, t1: 0.5, ph: 0 },
+  { kana: "シ", voiced: true, hilo: "L", t0: 0.5, t1: 1, ph: 0 },
+];
+const flatRef = { C: { pts: new Array(24).fill(0).map((_, i) => (i < 12 ? 2 : -2)), t0: 0, dur: 1 },
+                  spans: [[0, 0.5], [0.5, 1]] };
+const flatUser = { pts: new Array(24).fill(0).map((_, i) => (i < 12 ? 0.3 : -0.3)) }; // 起伏極小
+const flat = moraScoreAligned(flatUser, flatRef, twoMoras);
+check(flat.every(s => s.close === true && s.match === true), "使用者曲線幾乎平：兩拍都貼門檻 → 標 ≈ 不判錯（防雜訊誤判）");
+check(moraScoreAligned(null, ref, twoMoras) === null, "缺使用者曲線 → null");
+check(moraScoreAligned(dragged, { C: ref.C, spans: [[0, 1]] }, twoMoras) === null, "spans 與拍數不符 → null（呼叫端退回比例對齊）");
 
 console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
 process.exit(fails ? 1 : 0);
