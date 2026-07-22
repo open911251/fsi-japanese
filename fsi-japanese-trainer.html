@@ -55,11 +55,9 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="row small" style="margin-top:8px;gap:16px;flex-wrap:wrap;align-items:center;">
     今日：
     <span class="opt"><input type="checkbox" id="ckDrill" disabled> 操練</span>
-    <span class="opt"><input type="checkbox" id="ckAnki"> <span id="ckAnkiTxt" style="cursor:pointer;border-bottom:1px dotted;">Anki 詞彙</span></span>
-    <span class="opt"><input type="checkbox" id="ckListen"> <span id="ckListenTxt" style="cursor:pointer;border-bottom:1px dotted;">真實聽力 30 分</span></span>
     <a href="https://github.com/open911251/fsi-japanese/blob/main/STUDY-GUIDE.md" target="_blank" rel="noopener" class="small">完整指南</a>
   </div>
-  <div id="tdPanel" class="small" style="display:none;margin-top:8px;line-height:1.9;border:1px solid var(--line);border-radius:8px;padding:8px 10px;"></div>
+  <div id="tdRoutine" class="small" style="margin-top:8px;line-height:2;"></div>
 </div>
 
 <div class="card">
@@ -1674,10 +1672,6 @@ $("testKey").onclick=async()=>{
   catch(e){setStatus("ttsStatus","❌ 失敗："+e.message);}
 };
 $("fbReplaySeg").onclick=fbReplaySeg;
-$("ckAnki").onchange=()=>{daily.anki=$("ckAnki").checked;dailySave();};
-$("ckListen").onchange=()=>{daily.listen=$("ckListen").checked;dailySave();};
-$("ckAnkiTxt").onclick=()=>tdPanel("anki");
-$("ckListenTxt").onclick=()=>tdPanel("listen");
 $("mpPlay").onclick=mpAsk;
 $("mpAgain").onclick=()=>{if(mp.cur)say(mp.cur.s[mp.side]);};
 $("mpOptA").onclick=()=>mpAnswer(0);
@@ -1894,7 +1888,7 @@ function apAnswer(i){
 /* ================= 今日條（狀態驅動的每日待辦） ================= */
 function todayKey(){const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
 let daily={};try{daily=JSON.parse(store.get("fsi_daily","{}"))||{};}catch(e){}
-if(daily.day!==todayKey())daily={day:todayKey(),drill:false,anki:false,listen:false,mp:false};
+if(daily.day!==todayKey())daily={day:todayKey(),drill:false,mp:false,rt:{}};
 let streakD={last:"",n:0};try{streakD=JSON.parse(store.get("fsi_streak",'{"last":"","n":0}'))||streakD;}catch(e){}
 function dailySave(){store.set("fsi_daily",JSON.stringify(daily));store.set("fsi_streak",JSON.stringify(streakD));}
 function markPractice(){/* 完成一輪操練＝今天有練，維護連續天數 */
@@ -1919,6 +1913,29 @@ function lastPracticed(){
   return best;
 }
 const TD_MODENAME={listen:"聽讀",sub:"代換",qa:"應答",build:"逐段"};
+const ROUTINE=[
+  {sec:"早",key:"m1",label:"複習昨天課程（聽讀模式）",min:10,jump:()=>{switchMode("listen");runFrom(0);}},
+  {sec:"早",key:"m2",label:"出口仁新文法一點",min:20},
+  {sec:"早",key:"m3",label:"代換＋應答操練今日文法",min:20,jump:()=>{switchMode("sub");runFrom(0);}},
+  {sec:"早",key:"m4",label:"跟讀＋錄音腔調分析",min:10},
+  {sec:"晚",key:"e1",label:"日劇一集，記 2–3 句台詞",min:40},
+  {sec:"晚",key:"e2",label:"台詞貼進自訂教材→跟讀＋腔調分析",min:15,jump:()=>{switchMode("custom");$("customText").focus();$("customText").scrollIntoView({behavior:"smooth",block:"center"});}},
+  {sec:"晚",key:"e3",label:"TalkMe：今天學的句型拿出來用",min:15},
+];
+function tdRoutineRender(){
+  const rt=daily.rt||{};
+  let last="",html="";
+  ROUTINE.forEach(it=>{
+    if(it.sec!==last){html+="<div style='margin-top:6px;font-weight:600;'>"+it.sec+"間</div>";last=it.sec;}
+    const label=it.jump?("<span id='rj_"+it.key+"' style='cursor:pointer;border-bottom:1px dotted;'>"+it.label+"</span>"):it.label;
+    html+="<label class='opt' style='display:flex;gap:6px;'><input type='checkbox' id='rk_"+it.key+"'"+(rt[it.key]?" checked":"")+"> "+label+" <span style='color:var(--sub);'>"+it.min+"分</span></label>";
+  });
+  $("tdRoutine").innerHTML=html;
+  ROUTINE.forEach(it=>{
+    $("rk_"+it.key).onchange=()=>{daily.rt=daily.rt||{};daily.rt[it.key]=$("rk_"+it.key).checked;dailySave();};
+    if(it.jump)$("rj_"+it.key).onclick=it.jump;
+  });
+}
 function todayRender(){
   $("todayCard").style.display="";
   $("tdStreak").textContent=streakD.n>0?("🔥 連續 "+streakD.n+" 天"):"🌱 今天開始";
@@ -1927,18 +1944,10 @@ function todayRender(){
   const lp=lastPracticed();
   $("tdLast").innerHTML=(lp&&LESSONS[lp.lesson])?("上次："+LESSONS[lp.lesson].t.split(" ")[0]+" "+TD_MODENAME[lp.mode]+" "+lp.last+"% <button id='tdGoLast'>"+(lp.last>=75?"繼續":"重練")+"</button>"):"";
   $("tdMp").innerHTML=daily.mp?"👂 聽辨 ✓":"👂 聽辨還沒做 <button id='tdGoMp'>來幾題</button>";
-  $("ckDrill").checked=!!daily.drill;$("ckAnki").checked=!!daily.anki;$("ckListen").checked=!!daily.listen;
+  $("ckDrill").checked=!!daily.drill;tdRoutineRender();
   const r=$("tdGoReview");if(r)r.onclick=()=>{const by=srsDueAll().by;switchMode(Object.keys(by).sort((a,b)=>by[b]-by[a])[0]);runFrom(0);};
   const l=$("tdGoLast");if(l)l.onclick=()=>{state.lesson=lp.lesson;fillLessons();switchMode(lp.mode);runFrom(0);};
   const m=$("tdGoMp");if(m)m.onclick=()=>{switchMode("minpair");mpAsk();};
-}
-function tdPanel(which){/* 漸進揭露：點文字才展開工具建議，點方框只打勾 */
-  const p=$("tdPanel");
-  if(p.dataset.w===which&&p.style.display!=="none"){p.style.display="none";p.dataset.w="";return;}
-  p.dataset.w=which;p.style.display="";
-  if(which==="anki")p.innerHTML="📇 詞彙卡片 10–15 分：Anki 或 jpdb 擇一，跑生活高頻詞庫。　<a href='https://apps.ankiweb.net/' target='_blank' rel='noopener'>Anki</a>｜<a href='https://jpdb.io/' target='_blank' rel='noopener'>jpdb.io</a>　<button id='tdDone'>完成了 ✓</button>";
-  else p.innerHTML="🎧 真實聽力 30 分：日劇／vlog／廣播挑一個看完。<b>卡住的句子複製下來 → 回來貼「＋自訂教材」操練。</b>　<a href='https://www.nhk.or.jp/radionews/' target='_blank' rel='noopener'>NHK ラジオニュース</a>｜<a href='https://www.youtube.com/results?search_query=%E6%97%A5%E6%9C%AC%E8%AA%9E+vlog' target='_blank' rel='noopener'>YouTube vlog</a>　<button id='tdDone'>完成了 ✓</button>";
-  $("tdDone").onclick=()=>{daily[which]=true;dailySave();p.style.display="none";p.dataset.w="";todayRender();};
 }
 
 /* ================= 初始化 ================= */
