@@ -14,12 +14,14 @@ function makeEnv(preStore) {
     const mem=Object.assign({},PRE);
     const store={get:(k,d)=>k in mem?mem[k]:d,set:(k,v)=>{mem[k]=v;}};
     const els={};
-    const $=id=>els[id]||(els[id]={style:{},dataset:{}});
+    const $=id=>els[id]||(els[id]={style:{},dataset:{},value:""});
     const state={mode:"listen",lesson:0};
     let srs={},scores={};
     function switchMode(){}function runFrom(){}function fillLessons(){}function mpAsk(){}
     ${blk}
-    return {daily,streakD,markPractice,srsDueAll,lastPracticed,todayRender,els,
+    return {daily,streakD,markPractice,srsDueAll,lastPracticed,todayRender,els,plan,
+            planAdvanceIfNewDay,planMastered,planRender,LESSONS,
+            tdWeekNum,teacherRuleComment,teacherContext,WEEK_PLAN,
             setSrs:o=>{srs=o;},setScores:o=>{scores=o;},mem};
   `)(preStore || {});
 }
@@ -60,6 +62,70 @@ check(env.els.tdReview.innerHTML.includes("3 句"), "今日條顯示到期複習
 check(env.els.tdLast.innerHTML.includes("第9課") && env.els.tdLast.innerHTML.includes("繼續"), "上次進度：≥75% 顯示「繼續」");
 check(env.els.tdStreak.textContent.includes("連續"), "顯示連續天數");
 check(env.els.ckDrill.checked === true, "操練勾選反映今日狀態");
+
+// 今日指定課（自動排進度，換日才評估一次）
+const p1 = makeEnv({});
+check(p1.plan.lesson === 0 && p1.plan.day === 1, "無紀錄時預設第1課、第1天");
+
+const p2 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 2, day: 1, checked: today, forced: false }) });
+p2.planAdvanceIfNewDay();
+check(p2.plan.lesson === 2 && p2.plan.day === 1, "同一天重複評估 → 不變");
+
+const p3 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 2, day: 1, checked: yesterday, forced: false }) });
+p3.setScores({ 2: { sub: { best: 80 }, qa: { best: 90 } } });
+p3.planAdvanceIfNewDay();
+check(p3.plan.lesson === 3 && p3.plan.day === 1 && !p3.plan.forced, "換日＋已達標（≥75%）→ 前進下一課，天數歸1");
+
+const p4 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 2, day: 1, checked: yesterday, forced: false }) });
+p4.planAdvanceIfNewDay();
+check(p4.plan.lesson === 2 && p4.plan.day === 2, "換日＋未達標且未到上限天數 → 留在原課，天數+1");
+
+const p5 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 2, day: 2, checked: yesterday, forced: false }) });
+p5.planAdvanceIfNewDay();
+check(p5.plan.lesson === 3 && p5.plan.day === 1 && p5.plan.forced === true, "換日＋未達標但天數到上限 → 強制前進，標記 forced");
+
+const p6 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 3, day: 1, checked: yesterday, forced: true }) });
+p6.planAdvanceIfNewDay();
+check(p6.plan.forced === false, "forced 只維持一天，隔天評估後清除");
+
+const lastIdx = p6.LESSONS.length - 1;
+const p7 = makeEnv({ fsi_plan: JSON.stringify({ lesson: lastIdx, day: 2, checked: yesterday, forced: false }) });
+p7.planAdvanceIfNewDay();
+check(p7.plan.lesson === lastIdx, "已在最後一課 → 不再前進（不超出範圍）");
+
+const p8 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 0, day: 2, checked: today, forced: false }) });
+p8.planRender();
+check(p8.els.tdPlan.innerHTML.includes("⏰") && p8.els.tdPlan.innerHTML.includes("第2天"), "第2天未達標 → 顯示過關壓力提示");
+
+// 週數計算（開始日設定，17週表背景參考）
+const fmtDate = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const tenDaysAgo = fmtDate(new Date(Date.now() - 10 * DAY));
+const w1 = makeEnv({ fsi_start_date: tenDaysAgo });
+check(w1.tdWeekNum() === 2, "開始日往前推10天 → 第2週");
+const w2 = makeEnv({});
+check(w2.tdWeekNum() === null, "沒填開始日 → null");
+
+// 規則版講評（teacherRuleComment，不需要 LLM）
+const t1 = makeEnv({ fsi_plan: JSON.stringify({ lesson: 3, day: 2, checked: yesterday, forced: true }) });
+check(t1.teacherRuleComment().includes("不用有罪惡感"), "plan.forced → 講評提到不用有罪惡感");
+
+const t2 = makeEnv({});
+check(t2.teacherRuleComment().includes("還沒開始"), "今天還沒練、連續天數0 → 講評提醒開始");
+
+const t3 = makeEnv({ fsi_streak: JSON.stringify({ last: today, n: 5 }), fsi_daily: JSON.stringify({ day: today, drill: true, mp: false, rt: {} }) });
+t3.setSrs(Object.fromEntries(Array.from({ length: 9 }, (_, i) => ["listen|1|" + i, { b: 0, due: Date.now() - 1 }])));
+check(t3.teacherRuleComment().includes("到期"), "SRS 到期堆積 ≥8 句 → 講評提醒清複習");
+
+const t4 = makeEnv({ fsi_streak: JSON.stringify({ last: today, n: 5 }), fsi_daily: JSON.stringify({ day: today, drill: true, mp: false, rt: {} }) });
+check(t4.teacherRuleComment().includes("連續"), "連續天數高、無其他狀況 → 講評肯定連續天數");
+
+const t5 = makeEnv({ fsi_streak: JSON.stringify({ last: today, n: 1 }), fsi_daily: JSON.stringify({ day: today, drill: true, mp: false, rt: {} }) });
+check(t5.teacherRuleComment().includes("照表操課"), "都沒有特別狀況 → 預設句");
+
+// teacherContext 基本欄位
+const c1 = makeEnv({});
+const ctx = c1.teacherContext();
+check(ctx.includes(c1.LESSONS[0].t) && ctx.includes("到期複習"), "teacherContext 包含目前課名與到期複習數");
 
 console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
 process.exit(fails ? 1 : 0);

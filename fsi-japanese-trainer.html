@@ -37,6 +37,9 @@ summary{cursor:pointer;color:var(--accent2);}
 label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:center;}
 .rec-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#d00;animation:blink 1s infinite;}
 @keyframes blink{50%{opacity:.2;}}
+.wktable{border-collapse:collapse;font-size:.82rem;white-space:nowrap;}
+.wktable td,.wktable th{border:1px solid var(--line);padding:4px 8px;text-align:left;}
+.wktable tr.wkNow{background:#fdf3ef;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 @media(max-width:600px){.grid2{grid-template-columns:1fr;}.jp{font-size:1.35rem;}}
 </style>
@@ -45,8 +48,68 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 <h1>FSI 日語訓練工具 <span class="pill">聽 → 說 → 反覆操練</span></h1>
 <div class="tag">FSI 口語操練法：先聽不看字、跟讀、代換、應答、逐段累加。搭配 Google Cloud TTS 日語語音。</div>
 
+<div class="card" id="teacherCard" style="display:none;">
+  <div class="row" style="align-items:center;gap:8px;">
+    <img id="teacherAvatar" src="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;background:var(--line);display:none;">
+    <b id="teacherName"></b>　<span class="small" id="tdWeekInfo"></span>
+  </div>
+  <div id="teacherMsg" style="margin-top:6px;font-size:1.05rem;line-height:1.8;"></div>
+  <div id="teacherChatLog" class="small" style="margin-top:8px;max-height:220px;overflow-y:auto;line-height:1.8;display:none;"></div>
+  <div class="row" id="teacherChatRow" style="margin-top:8px;display:none;">
+    <input type="text" id="teacherChatInput" style="flex:1;" placeholder="回她，或問點什麼…">
+    <button id="teacherChatSend">送出</button>
+  </div>
+  <div class="small" id="teacherChatStatus" style="margin-top:4px;"></div>
+  <details style="margin-top:8px;"><summary>角色設定（人設／頭像，只存在你的瀏覽器）</summary>
+    <div class="row" style="margin-top:8px;">
+      <input type="text" id="personaName" placeholder="角色名稱" style="flex:1;min-width:140px;">
+      <input type="file" id="personaAvatarPick" accept="image/*" style="flex:1;">
+      <button id="personaAvatarClear">移除頭像</button>
+    </div>
+    <textarea id="personaText" rows="6" style="width:100%;margin-top:8px;" placeholder="貼上角色的 roleplay system prompt（設定、語氣、口頭禪都可以）。留空就只會顯示規則產生的進度講評，不會嘗試角色扮演。"></textarea>
+    <div class="small" style="margin-top:6px;">只存在這台瀏覽器的 localStorage，不會上傳、不會進版本控制。</div>
+  </details>
+  <details style="margin-top:8px;"><summary>啟動困難對策／認知負荷分桶</summary>
+    <div style="margin-top:8px;line-height:1.8;">
+      <b>啟動困難對策</b>
+      <ol style="margin:6px 0 0 20px;padding:0;">
+        <li>2分鐘規則：只承諾做2分鐘，開始後想停再停</li>
+        <li>只追蹤「有沒有開始」，按了播放＝今天成功</li>
+        <li>照表操課，不做選擇：決策是啟動的敵人</li>
+        <li>做不完就砍後面的，永遠不要砍早間第1項</li>
+        <li>中斷一天沒關係，不要中斷兩天</li>
+      </ol>
+      <b style="display:block;margin-top:10px;">認知負荷分兩桶</b>
+      <div class="small" style="margin-top:4px;">打排位（高負荷，上限約3小時／天）：FSI操練、出口仁新文法、シャドーイング跟讀＋錄音腔調分析、手抄重點句、TalkMe／真人對話——最耗腦，別當免費額度。</div>
+      <div class="small" style="margin-top:4px;">打野怪（低負荷，時數不設上限）：日劇看劇情、podcast掛著聽、讀翻譯筆記——加速語感／聽力校準，不會加速文法產出。</div>
+    </div>
+  </details>
+  <details><summary>有幹勁日加碼菜單／現在不要碰</summary>
+    <div style="margin-top:8px;line-height:1.8;">
+      <b>有幹勁日加碼菜單（挑1–2樣，上限+60分，不算進度）</b>
+      <ul style="margin:6px 0 0 20px;padding:0;">
+        <li>精聽聽寫：日劇2分鐘對白逐句聽寫→對日文字幕批改→跟讀到九成像</li>
+        <li>自言自語錄音：用今天的文法描述今天，錄1分鐘</li>
+        <li>NHK NEWS WEB EASY：讀1–2篇（附假名）</li>
+        <li>9秒單字法：新一批20–30個單字，每個9秒（拼字→仿發音→對意思→掃例句），連續10天刷同一批</li>
+      </ul>
+      <b style="display:block;margin-top:10px;">🚫 現在不要碰</b>
+      <div class="small" style="margin-top:4px;">N3/N4題庫、540題、耳感記憶、聽解速成、TRY! N4——全部留到考前2–3個月再開。大家的日本語當參考書查閱用，不當主線。</div>
+      <b style="display:block;margin-top:10px;">🔜 開始上班後</b>
+      <div class="small" style="margin-top:4px;">早間縮成30分（複習10＋操練20，新課只排週末）。進度表不用重排，從卡住的那週接著走，慢下來不算退步。</div>
+    </div>
+  </details>
+  <details><summary>17 週進度表（背景參考，不影響實際排課）</summary>
+    <div class="row small" style="margin-top:8px;align-items:center;">開始日：<input type="date" id="tdStartDate"></div>
+    <div style="overflow-x:auto;margin-top:8px;">
+      <table id="teacherWeekTable" class="wktable"></table>
+    </div>
+  </details>
+</div>
+
 <div class="card" id="todayCard" style="display:none;">
-  <div class="row" style="align-items:center;gap:14px;flex-wrap:wrap;">
+  <div id="tdPlan" style="font-size:1rem;"></div>
+  <div class="row" style="align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px;">
     <b id="tdStreak"></b>
     <span id="tdReview"></span>
     <span id="tdLast"></span>
@@ -130,6 +193,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="build">④ 逐段累加</button>
     <button data-mode="rec">⑤ 錄音對比</button>
     <button data-mode="minpair">⑥ 聽辨</button>
+    <button data-mode="shadow">⑦ 影子跟讀</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
 </div>
@@ -219,6 +283,36 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="small" id="apScore" style="margin-top:6px;"></div>
   <div class="small" style="margin-top:8px;">正確重音直接取自 VOICEVOX 對整句的分析（非人工標註），錯誤選項是同一個詞另一個重音核位置的合成音。實驗性功能：詞庫小、依賴 VOICEVOX 辭典判斷，個別詞可能跟你查到的標準答案不同。</div>
   </div>
+</div>
+
+<div class="card" id="shadowCard" style="display:none;">
+  <b>影子跟讀</b>　<span class="small">真人音檔，同步跟讀＋錄音自聽，不分析音準</span>
+  <div class="row" style="margin-top:10px;">
+    <input type="file" id="shadowDirPick" webkitdirectory multiple accept="audio/*" style="display:none;">
+    <button id="shadowPickBtn">📁 選擇音檔資料夾</button>
+    <span class="small" id="shadowIdxStatus"></span>
+  </div>
+  <div class="row" style="margin-top:10px;">
+    <select id="shadowLessonSel" style="flex:1;min-width:200px;" disabled></select>
+    <select id="shadowTrackSel" style="flex:1;min-width:160px;" disabled></select>
+  </div>
+  <audio id="shadowAudio" controls style="width:100%;margin-top:10px;"></audio>
+  <textarea id="shadowText" rows="4" style="width:100%;margin-top:8px;" disabled placeholder="貼上這段對應的課本文字（只需貼一次，會依課號＋小節存在瀏覽器，下次選到同一段自動帶出，方便邊聽邊看稿跟讀）"></textarea>
+  <div class="row" style="margin-top:8px;">
+    <button id="shadowSetA" disabled>🅰 設起點</button>
+    <button id="shadowSetB" disabled>🅱 設終點</button>
+    <button id="shadowLoop" disabled>🔁 循環：關</button>
+    <button id="shadowClearAB" disabled>↺ 清除區間</button>
+    <span class="small" id="shadowABInfo"></span>
+  </div>
+  <div class="row" style="margin-top:12px;">
+    <button id="shadowRecBtn" disabled>🔴 錄音跟讀</button>
+    <button id="shadowPlayMine" disabled>▶ 聽自己</button>
+    <button id="shadowAB" disabled>🔄 連續對比</button>
+    <button class="primary" id="shadowDone" disabled>✅ 記錄本次跟讀</button>
+  </div>
+  <div class="status" id="shadowStatus"></div>
+  <div class="small" style="margin-top:8px;">音檔只在瀏覽器本機讀取播放，不會上傳、不會存進這個網站——重新整理頁面要重選一次資料夾。</div>
 </div>
 
 <div class="card" id="customCard" style="display:none;">
@@ -1304,7 +1398,6 @@ function scoreBadge(i){/* 取已練模式中較弱的一項當精熟度下限 */
   return b>=75?"　✅"+b+"%":"　⚠"+b+"%";
 }
 function finishRound(){/* 回合結算；遲到的 STT 結果會再次呼叫以更新 */
-  markPractice();
   const v=roundVerdict(roundStats);
   if(!v||(state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="build")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
   scoreSave(v);
@@ -1456,7 +1549,7 @@ async function playItem(i,id){
 }
 async function runFrom(i){
   state.running=true;const id=++state.runId;
-  if(i===0){srsBuildReview();roundStats=[];}
+  if(i===0){srsBuildReview();roundStats=[];markPractice();}
   roundDone=false;
   $("btnStart").textContent="▶ 進行中…";
   for(let k=i;k<items().length;k++){
@@ -1639,13 +1732,15 @@ function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
+  $("shadowCard").style.display=m==="shadow"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"){
+  if(m!=="shadow")shadowPauseAll();
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -1885,12 +1980,177 @@ function apAnswer(i){
   $("apResult").textContent=(hit?"✅ 正確！":"❌ 不對。")+"標準唸法是 "+(c.correctSide===0?"A":"B")+"——「"+c.word+"」是"+apWordLabel(c.n,c.correct)+"；另一個是"+wrongDesc+"的合成錯誤示範，僅供對比。";
 }
 
+/* ================= 影子跟讀（純跟讀，無腔調分析） ================= */
+/* 音檔來自使用者本機資料夾（webkitdirectory 選取，不持久化、不上傳），依檔名「第N課」＋小節關鍵字
+   建立課號→小節的記憶體索引；A-B 迴圈與錄音都是獨立狀態，跟⑤錄音對比的 mediaRec/recChunks 不共用。 */
+const SHADOW_SECTION_ORDER=["單語","文型","例文","會話","練習A","練習B","練習C","問題1","問題2","問題3","問題4"];
+function shadowSectionOf(name){
+  if(/単語|單語/.test(name))return"單語";
+  if(/文型/.test(name))return"文型";
+  if(/例文/.test(name))return"例文";
+  if(/会話|會話/.test(name))return"會話";
+  if(/練習\s*A/.test(name))return"練習A";
+  if(/練習\s*B/.test(name))return"練習B";
+  if(/練習\s*C/.test(name))return"練習C";
+  const m=name.match(/問題[^0-9]*([0-9])/);return m?"問題"+m[1]:null;
+}
+let shadowIndex={},shadowLessonNums=[],shadowUrl=null,shadowA=0,shadowB=null,shadowLoopOn=false;
+let shadowMediaRec=null,shadowRecChunks=[],shadowMyUrl=null,shadowRecording=false;
+let shadowCurLesson=null,shadowCurSection=null;
+function shadowFmt(t){t=Math.max(0,t||0);const mi=Math.floor(t/60),s=Math.floor(t%60);return mi+":"+String(s).padStart(2,"0");}
+function shadowTextKey(n,sec){return"fsi_shadow_text|"+n+"|"+sec;}
+function shadowIndexFiles(fileList){
+  shadowIndex={};
+  Array.from(fileList).forEach(f=>{
+    if(!/\.mp3$/i.test(f.name))return;
+    const lm=f.name.match(/第(\d+)課/);if(!lm)return;
+    const sec=shadowSectionOf(f.name);if(!sec)return;
+    const n=parseInt(lm[1]);
+    (shadowIndex[n]=shadowIndex[n]||[]).push({section:sec,file:f});
+  });
+  shadowLessonNums=Object.keys(shadowIndex).map(Number).sort((a,b)=>a-b);
+  shadowLessonNums.forEach(n=>shadowIndex[n].sort((a,b)=>SHADOW_SECTION_ORDER.indexOf(a.section)-SHADOW_SECTION_ORDER.indexOf(b.section)));
+}
+function shadowFillLessonSel(){
+  const sel=$("shadowLessonSel");sel.innerHTML="";
+  shadowLessonNums.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=LESSONS[n-1]?LESSONS[n-1].t:("第"+n+"課");sel.appendChild(o);});
+  sel.disabled=shadowLessonNums.length===0;
+}
+function shadowFillTrackSel(){
+  const sel=$("shadowTrackSel");sel.innerHTML="";
+  const n=parseInt($("shadowLessonSel").value);
+  (shadowIndex[n]||[]).forEach((t,i)=>{const o=document.createElement("option");o.value=i;o.textContent=t.section;sel.appendChild(o);});
+  sel.disabled=!shadowIndex[n]||shadowIndex[n].length===0;
+  shadowLoadTrack();
+}
+function shadowSetEnabled(on){
+  ["shadowSetA","shadowSetB","shadowLoop","shadowClearAB","shadowRecBtn","shadowDone","shadowText"].forEach(id=>$(id).disabled=!on);
+}
+function shadowUpdateABInfo(){$("shadowABInfo").textContent="A "+shadowFmt(shadowA)+(shadowB!=null?"　B "+shadowFmt(shadowB):"　B 未設定");}
+function shadowLoadTrack(){
+  const n=parseInt($("shadowLessonSel").value);const list=shadowIndex[n]||[];
+  const t=list[parseInt($("shadowTrackSel").value||0)];
+  if(shadowUrl)URL.revokeObjectURL(shadowUrl);
+  if(!t){shadowCurLesson=null;shadowCurSection=null;$("shadowAudio").removeAttribute("src");$("shadowText").value="";shadowSetEnabled(false);return;}
+  shadowCurLesson=n;shadowCurSection=t.section;
+  shadowUrl=URL.createObjectURL(t.file);
+  $("shadowAudio").src=shadowUrl;
+  $("shadowText").value=store.get(shadowTextKey(n,t.section),"");
+  shadowA=0;shadowB=null;shadowLoopOn=false;
+  $("shadowLoop").textContent="🔁 循環：關";shadowUpdateABInfo();
+  shadowSetEnabled(true);
+}
+function shadowPauseAll(){
+  const a=$("shadowAudio");if(a)a.pause();
+  if(shadowRecording&&shadowMediaRec)shadowMediaRec.stop();
+}
+async function shadowToggleRec(){
+  if(shadowRecording){shadowMediaRec.stop();return;}
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    shadowMediaRec=new MediaRecorder(stream);shadowRecChunks=[];
+    shadowMediaRec.ondataavailable=e=>shadowRecChunks.push(e.data);
+    shadowMediaRec.onstop=()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      if(shadowMyUrl)URL.revokeObjectURL(shadowMyUrl);
+      shadowMyUrl=URL.createObjectURL(new Blob(shadowRecChunks,{type:"audio/webm"}));
+      $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;
+      shadowRecording=false;$("shadowRecBtn").innerHTML="🔴 錄音跟讀";
+      setStatus("shadowStatus","錄好了，按「聽自己」回放。");
+    };
+    shadowMediaRec.start();shadowRecording=true;
+    $("shadowRecBtn").innerHTML='<span class="rec-dot"></span> 停止';
+    setStatus("shadowStatus","錄音中…跟著音檔一起唸。");
+  }catch(e){setStatus("shadowStatus","無法使用麥克風："+e.message);}
+}
+function shadowPlaySegmentOnce(){
+  return new Promise((resolve,reject)=>{
+    const a=$("shadowAudio");if(!a.src){resolve();return;}
+    const wasLoop=shadowLoopOn;shadowLoopOn=false;
+    const endT=shadowB!=null?shadowB:(a.duration||Infinity);
+    const cleanup=()=>{a.removeEventListener("timeupdate",onTime);a.removeEventListener("ended",onEnded);shadowLoopOn=wasLoop;};
+    const onTime=()=>{if(a.currentTime>=endT-0.05){a.pause();cleanup();resolve();}};
+    const onEnded=()=>{cleanup();resolve();};
+    a.addEventListener("timeupdate",onTime);
+    a.addEventListener("ended",onEnded,{once:true});
+    a.currentTime=shadowA;
+    a.play().catch(e=>{cleanup();reject(e);});
+  });
+}
+function shadowPlayMine(){return shadowMyUrl?playUrl(shadowMyUrl):Promise.resolve();}
+async function shadowPlayAB(){
+  setStatus("shadowStatus","🔄 播放音檔片段…");
+  try{
+    await shadowPlaySegmentOnce();
+    await new Promise(r=>setTimeout(r,400));
+    setStatus("shadowStatus","🔄 播放我的錄音…");
+    await shadowPlayMine();
+    setStatus("shadowStatus","對比播放完畢。");
+  }catch(e){setStatus("shadowStatus","播放失敗："+e.message);}
+}
+$("shadowPickBtn").onclick=()=>$("shadowDirPick").click();
+$("shadowDirPick").onchange=e=>{
+  shadowIndexFiles(e.target.files);
+  const total=shadowLessonNums.reduce((s,n)=>s+shadowIndex[n].length,0);
+  setStatus("shadowIdxStatus",shadowLessonNums.length?("已找到 "+shadowLessonNums.length+" 課、"+total+" 個音檔"):"沒找到符合「第N課」命名的音檔");
+  shadowFillLessonSel();shadowFillTrackSel();
+};
+$("shadowLessonSel").onchange=shadowFillTrackSel;
+$("shadowTrackSel").onchange=shadowLoadTrack;
+$("shadowText").oninput=()=>{if(shadowCurLesson!=null)store.set(shadowTextKey(shadowCurLesson,shadowCurSection),$("shadowText").value);};
+$("shadowSetA").onclick=()=>{shadowA=$("shadowAudio").currentTime;if(shadowB!=null&&shadowA>=shadowB)shadowB=null;shadowUpdateABInfo();};
+$("shadowSetB").onclick=()=>{const b=$("shadowAudio").currentTime;if(b>shadowA){shadowB=b;shadowUpdateABInfo();}};
+$("shadowClearAB").onclick=()=>{shadowA=0;shadowB=null;shadowLoopOn=false;$("shadowLoop").textContent="🔁 循環：關";shadowUpdateABInfo();};
+$("shadowLoop").onclick=()=>{shadowLoopOn=!shadowLoopOn;$("shadowLoop").textContent="🔁 循環："+(shadowLoopOn?"開":"關");};
+$("shadowAudio").addEventListener("timeupdate",()=>{
+  if(shadowLoopOn&&shadowB!=null&&$("shadowAudio").currentTime>=shadowB)$("shadowAudio").currentTime=shadowA;
+});
+$("shadowRecBtn").onclick=shadowToggleRec;
+$("shadowPlayMine").onclick=shadowPlayMine;
+$("shadowAB").onclick=shadowPlayAB;
+$("shadowDone").onclick=()=>{markPractice();setStatus("shadowStatus","已記錄今日練習！繼續跟讀或換下一段。");};
+
 /* ================= 今日條（狀態驅動的每日待辦） ================= */
 function todayKey(){const d=new Date();return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate();}
 let daily={};try{daily=JSON.parse(store.get("fsi_daily","{}"))||{};}catch(e){}
 if(daily.day!==todayKey())daily={day:todayKey(),drill:false,mp:false,rt:{}};
 let streakD={last:"",n:0};try{streakD=JSON.parse(store.get("fsi_streak",'{"last":"","n":0}'))||streakD;}catch(e){}
 function dailySave(){store.set("fsi_daily",JSON.stringify(daily));store.set("fsi_streak",JSON.stringify(streakD));}
+/* 今日指定課：每課給 PLAN_CAP 天練到「精熟」（sub/qa/build 已練模式 best 皆 ≥75%，同 scoreBadge 的定義）。
+   換日時才評估一次（plan.checked 卡日期防重複判定）：達標就前進，天數到了不管有沒有達標也強制前進
+   （SRS 之後還會排到這課的句子，往前走不等於放棄，只是不讓卡關卡到沒進度）。 */
+const PLAN_CAP=2;
+let plan={};try{plan=JSON.parse(store.get("fsi_plan","{}"))||{};}catch(e){}
+if(plan.lesson==null)plan={lesson:0,day:1,checked:todayKey(),forced:false};
+function planSave(){store.set("fsi_plan",JSON.stringify(plan));}
+function planMastered(i){
+  const L=scores[i];if(!L)return false;
+  const vals=["sub","qa","build"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
+  return vals.length>0&&Math.min.apply(null,vals)>=75;
+}
+function planAdvanceIfNewDay(){
+  const t=todayKey();
+  if(plan.checked===t)return;
+  plan.checked=t;plan.forced=false;
+  const atEnd=plan.lesson>=LESSONS.length-1;
+  if(planMastered(plan.lesson)){
+    if(!atEnd){plan.lesson++;plan.day=1;}
+  }else if(plan.day>=PLAN_CAP){
+    if(!atEnd){plan.lesson++;plan.day=1;plan.forced=true;}
+  }else{
+    plan.day++;
+  }
+  planSave();
+}
+function planRender(){
+  const L=LESSONS[plan.lesson];
+  if(!L){$("tdPlan").innerHTML="";return;}
+  const pressing=plan.day>=PLAN_CAP&&!planMastered(plan.lesson);
+  let html="📖 今天："+L.t+"（第"+plan.day+"天）";
+  if(pressing)html="<b style='color:var(--accent)'>"+html+" ⏰ 今天要過關</b>";
+  if(plan.forced)html+="　<span style='color:var(--accent)'>⚠ 上一課還沒達標，天數到了先往下走，之後複習還會考</span>";
+  $("tdPlan").innerHTML=html;
+}
 function markPractice(){/* 完成一輪操練＝今天有練，維護連續天數 */
   daily.drill=true;
   const t=todayKey();
@@ -1918,6 +2178,7 @@ const ROUTINE=[
   {sec:"早",key:"m2",label:"出口仁新文法一點",min:20},
   {sec:"早",key:"m3",label:"代換＋應答操練今日文法",min:20,jump:()=>{switchMode("sub");runFrom(0);}},
   {sec:"早",key:"m4",label:"跟讀＋錄音腔調分析",min:10},
+  {sec:"早",key:"m5",label:"影子跟讀（真人音檔，不分析音準）",min:15,jump:()=>{switchMode("shadow");}},
   {sec:"晚",key:"e1",label:"日劇一集，記 2–3 句台詞",min:40},
   {sec:"晚",key:"e2",label:"台詞貼進自訂教材→跟讀＋腔調分析",min:15,jump:()=>{switchMode("custom");$("customText").focus();$("customText").scrollIntoView({behavior:"smooth",block:"center"});}},
   {sec:"晚",key:"e3",label:"TalkMe：今天學的句型拿出來用",min:15},
@@ -1938,6 +2199,7 @@ function tdRoutineRender(){
 }
 function todayRender(){
   $("todayCard").style.display="";
+  planRender();
   $("tdStreak").textContent=streakD.n>0?("🔥 連續 "+streakD.n+" 天"):"🌱 今天開始";
   const d=srsDueAll();
   $("tdReview").innerHTML=d.tot?("🔁 到期複習 "+d.tot+" 句 <button id='tdGoReview'>開始</button>"):"✅ 沒有到期複習";
@@ -1948,7 +2210,140 @@ function todayRender(){
   const r=$("tdGoReview");if(r)r.onclick=()=>{const by=srsDueAll().by;switchMode(Object.keys(by).sort((a,b)=>by[b]-by[a])[0]);runFrom(0);};
   const l=$("tdGoLast");if(l)l.onclick=()=>{state.lesson=lp.lesson;fillLessons();switchMode(lp.mode);runFrom(0);};
   const m=$("tdGoMp");if(m)m.onclick=()=>{switchMode("minpair");mpAsk();};
+  $("teacherCard").style.display="";
+  tdWeekInfoRender();teacherWeekTableRender();teacherMaybeGreet();
 }
+
+/* ================= 進度陪伴角色（人設／頭像使用者自填，不寫死進檔案；17週表僅背景參考） ================= */
+const WEEK_PLAN=[
+{w:1,fsi:"L1–2",book:"第1課、第2課",g:"です／じゃありません、これ・それ・あれ",ms:""},
+{w:2,fsi:"L3–4",book:"第3課、第4課",g:"ここ・そこ・あそこ、時間（〜時・から〜まで）",ms:""},
+{w:3,fsi:"L5–6",book:"第5課、第6課",g:"〜へ行きます、を＋動詞",ms:""},
+{w:4,fsi:"L7–8",book:"第7課、第8課",g:"で（工具）・あげます／もらいます、い形／な形容詞",ms:""},
+{w:5,fsi:"L9–10",book:"第9課、第10課",g:"好き・わかります・から、あります・います",ms:""},
+{w:6,fsi:"L11–12",book:"第11課、第12課",g:"數量詞・期間・回數、過去形・比較",ms:""},
+{w:7,fsi:"L13–14",book:"第13課、第14＋15課",g:"ほしい・たい、て形（ください／ています／もいいですか／はいけません）",ms:"✅ N5完成，真人對話正式開始"},
+{w:8,fsi:"L15–16",book:"第19課、第18課",g:"た形經驗・〜たり〜たり、辭書形・ことができます",ms:""},
+{w:9,fsi:"L17–18",book:"第17課、第20＋21課",g:"ない形（禁止・義務）、普通形＋と思います／と言いました",ms:""},
+{w:10,fsi:"L19–20",book:"第22課、第25課",g:"名詞修飾節、條件（〜たら・〜ても）",ms:""},
+{w:11,fsi:"L21–22",book:"第27課、第31課",g:"可能形、意向形・つもり",ms:""},
+{w:12,fsi:"L23–24",book:"第24＋29＋30＋40課、第37課",g:"てくれる／もらう・ておく・てしまう・てみます、受身",ms:""},
+{w:13,fsi:"L25",book:"第48課",g:"使役・使役受身（單課週，內容重）",ms:""},
+{w:14,fsi:"複習週",book:"第17〜40課範圍總複習",g:"FSI應答模式跑完L15–25全部，弱點挑出來重操",ms:"✅ N4完成"},
+{w:15,fsi:"L26",book:"第43＋46＋47課",g:"そうです（樣態／傳聞）・ようです・はずです",ms:""},
+{w:16,fsi:"L27",book:"第49＋50課",g:"敬語（尊敬語・謙讓語）",ms:""},
+{w:17,fsi:"L28",book:"第28＋35＋42＋45＋46課",g:"N3綜合句型（ば〜ほど・ながら・のに・たばかり等）＋總複習",ms:"✅ N3文法覆蓋完成"},
+];
+function tdWeekNum(){
+  const s=store.get("fsi_start_date","");if(!s)return null;
+  const start=new Date(s+"T00:00:00");if(isNaN(start.getTime()))return null;
+  return Math.floor((Date.now()-start.getTime())/(7*86400000))+1;
+}
+function tdWeekInfoRender(){
+  const n=tdWeekNum();
+  if(n==null)$("tdWeekInfo").textContent="（可選）填開始日對照第幾週";
+  else if(n<1)$("tdWeekInfo").textContent="參考：還沒開始";
+  else if(n>17)$("tdWeekInfo").textContent="參考：已超過表定17週，照現在彈性進度走就好";
+  else $("tdWeekInfo").textContent="參考：第 "+n+" 週";
+}
+function teacherWeekTableRender(){
+  const n=tdWeekNum();
+  let html="<tr><th>週</th><th>FSI課程</th><th>教科書課次</th><th>文法主題</th><th>里程碑</th></tr>";
+  WEEK_PLAN.forEach(r=>{
+    html+="<tr"+(r.w===n?' class="wkNow"':"")+"><td>"+r.w+"</td><td>"+r.fsi+"</td><td>"+r.book+"</td><td>"+r.g+"</td><td>"+(r.ms||"")+"</td></tr>";
+  });
+  $("teacherWeekTable").innerHTML=html;
+}
+function teacherEsc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function teacherReady(){return!!$("llmUrl").value.trim()&&!!store.get("fsi_persona_text","").trim();}
+function teacherContext(){
+  const bits=[];
+  bits.push("連續練習 "+streakD.n+" 天，今天"+(daily.drill?"已經練過":"還沒開始練"));
+  const L=LESSONS[plan.lesson];
+  if(L)bits.push("目前課程「"+L.t+"」，第 "+plan.day+" 天（門檻 "+PLAN_CAP+" 天）"+(plan.forced?"（上一課沒達標，天數到了先往下走）":""));
+  const d=srsDueAll();
+  bits.push("到期複習 "+d.tot+" 句");
+  const wn=tdWeekNum();
+  if(wn!=null&&wn>=1&&wn<=17)bits.push("參考進度表：第 "+wn+" 週");
+  return bits.join("；");
+}
+function teacherRuleComment(){
+  const L=LESSONS[plan.lesson];
+  const d=srsDueAll();
+  if(plan.forced&&L)return"「"+L.t.split(" ")[0]+"」卡了 "+PLAN_CAP+" 天沒達標，往下走了——之後複習還會排到，不用有罪惡感。";
+  if(!daily.drill&&streakD.n===0)return"今天還沒開始，2分鐘就好，按下第一句播放鍵。";
+  if(d.tot>=8)return"複習堆了 "+d.tot+" 句到期，找時間清一下，別讓它越滾越大。";
+  if(streakD.n>=3)return"連續 "+streakD.n+" 天了，穩定的節奏本身就是最難的部分。";
+  return"照表操課就好，不用多想。";
+}
+let teacherChatHistory=[];try{teacherChatHistory=JSON.parse(store.get("fsi_teacher_chat","[]"))||[];}catch(e){}
+function teacherChatSave(){
+  if(teacherChatHistory.length>12)teacherChatHistory=teacherChatHistory.slice(-12);
+  store.set("fsi_teacher_chat",JSON.stringify(teacherChatHistory));
+}
+function teacherSystemPrompt(){
+  return store.get("fsi_persona_text","")+"\n\n# 今日の学習状況\n"+teacherContext()+
+    "\n\n進捗について軽く触れてもいいけど、しつこく催促しない。學習の順番やカリキュラムには口を出さない、それはもう別で決まっている。";
+}
+async function teacherChatCall(userText){
+  if(!teacherReady()){teacherChatRender();return;}
+  const messages=[{role:"system",content:teacherSystemPrompt()}].concat(teacherChatHistory);
+  if(userText!=null)messages.push({role:"user",content:userText});
+  else messages.push({role:"user",content:"（見て自然にひとこと話しかけて。質問は0〜1個。）"});
+  try{
+    const r=await fetch($("llmUrl").value.trim(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:$("llmModel").value.trim()||undefined,messages,stream:false})});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const reply=((await r.json()).choices[0].message.content||"").trim();
+    if(userText!=null)teacherChatHistory.push({role:"user",content:userText});
+    teacherChatHistory.push({role:"assistant",content:reply});
+    teacherChatSave();
+    $("teacherChatStatus").textContent="";
+    teacherChatRender();
+  }catch(e){
+    $("teacherChatStatus").textContent="⚠ 連不上（隧道沒開？或伺服器未允許 CORS）";
+    teacherChatRender();
+  }
+}
+function teacherChatRender(){
+  $("teacherName").textContent=store.get("fsi_persona_name","")||"進度小幫手";
+  const av=store.get("fsi_persona_avatar","");
+  $("teacherAvatar").src=av;$("teacherAvatar").style.display=av?"":"none";
+  const last=teacherChatHistory.length?teacherChatHistory[teacherChatHistory.length-1]:null;
+  $("teacherMsg").textContent=(last&&last.role==="assistant")?last.content:teacherRuleComment();
+  const ready=teacherReady();
+  $("teacherChatRow").style.display=ready?"":"none";
+  if(ready&&teacherChatHistory.length){
+    $("teacherChatLog").style.display="";
+    $("teacherChatLog").innerHTML=teacherChatHistory.map(m=>{
+      if(m.role==="assistant")return"<div style='display:flex;gap:6px;align-items:flex-start;margin-top:4px;'>"+(av?"<img src='"+av+"' style='width:20px;height:20px;border-radius:50%;object-fit:cover;'>":"")+"<span>"+teacherEsc(m.content)+"</span></div>";
+      return"<div style='margin-top:4px;text-align:right;color:var(--sub);'>"+teacherEsc(m.content)+"</div>";
+    }).join("");
+    $("teacherChatLog").scrollTop=$("teacherChatLog").scrollHeight;
+  }else{
+    $("teacherChatLog").style.display="none";$("teacherChatLog").innerHTML="";
+  }
+}
+function teacherMaybeGreet(){
+  const t=todayKey();
+  if(!teacherReady()||store.get("fsi_teacher_greet_day","")===t){teacherChatRender();return Promise.resolve();}
+  store.set("fsi_teacher_greet_day",t);
+  return teacherChatCall(null);
+}
+$("teacherChatSend").onclick=()=>{
+  const t=$("teacherChatInput").value.trim();if(!t)return;
+  $("teacherChatInput").value="";
+  teacherChatCall(t);
+};
+$("personaName").onchange=()=>{store.set("fsi_persona_name",$("personaName").value.trim());teacherChatRender();};
+$("personaText").onchange=()=>{store.set("fsi_persona_text",$("personaText").value);teacherChatRender();};
+$("personaAvatarPick").onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const fr=new FileReader();
+  fr.onload=()=>{store.set("fsi_persona_avatar",fr.result);teacherChatRender();};
+  fr.readAsDataURL(f);
+};
+$("personaAvatarClear").onclick=()=>{store.set("fsi_persona_avatar","");$("personaAvatarPick").value="";teacherChatRender();};
+$("tdStartDate").onchange=()=>{store.set("fsi_start_date",$("tdStartDate").value);tdWeekInfoRender();teacherWeekTableRender();};
 
 /* ================= 初始化 ================= */
 (function init(){
@@ -1960,10 +2355,14 @@ function todayRender(){
   $("llmUrl").value=store.get("fsi_llm_url","");$("llmModel").value=store.get("fsi_llm_model","");
   $("vvUrl").value=store.get("fsi_vv_url","");$("vvSpeaker").value=store.get("fsi_vv_speaker","8");
   $("fbChk").checked=store.get("fsi_fb","0")==="1"&&!!$("sttUrl").value;
+  $("tdStartDate").value=store.get("fsi_start_date","");
+  $("personaName").value=store.get("fsi_persona_name","");
+  $("personaText").value=store.get("fsi_persona_text","");
   const c=store.get("fsi_custom","");if(c){$("customText").value=c;
     const lines=c.split("\n").map(s=>s.trim()).filter(Boolean);
     if(lines.length){const listen=lines.map(l=>{const p=l.split(/[|｜]/);return[p[0].trim(),"",(p[1]||"").trim()];});
       state.customLesson={t:"自訂教材",g:"自訂內容",listen,sub:[],qa:[],build:null};}}
+  planAdvanceIfNewDay();state.lesson=plan.lesson;
   fillLessons();updateProg();todayRender();
   if(window.speechSynthesis)speechSynthesis.getVoices();
 })();
