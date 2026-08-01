@@ -26,11 +26,11 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 
 `fsi-japanese-trainer.html` 內的 `<script>` 分幾層：
 
-- **`LESSONS` 陣列**（約 150–730 行）：28 課教材資料，每課一個物件 `{t, g, listen, sub, qa, build}`。這是檔案的主體。
+- **`LESSONS` 陣列**（約 367–942 行）：28 課教材資料，每課一個物件 `{t, g, listen, sub, qa, build}`。這是檔案的主體。
 - **狀態機**：全域 `state` 物件（`mode`/`lesson`/`idx`/`running`/`runId`）。`runId` 遞增用於取消進行中的非同步播放迴圈（`sleep()` 會輪詢 `runId` 提早結束）。
 - **語音層**：`say()` 優先走 `synthCloud()`（Google Cloud TTS REST API，key 存 localStorage），失敗或無 key 時退回 `speakBrowser()`（Web Speech API）。
 - **四種練習模式**：`playItem()` 依 `state.mode`（listen/sub/qa/build）決定播放與停頓流程；`runFrom()` 是主迴圈。sub 模式的項目有三種 type：`base`（基本句）、`prev`（代換詞預習，開關控制，不進 SRS）、`cue`（正式出題）。
-- **錄音與腔調分析**：MediaRecorder 錄音 + Web Audio 解碼，`pitchTrack()`（自相關法）抽音高、`contour()` 正規化、`analyzePitch()` 算相似度/語速/句尾升降並畫圖。
+- **錄音與腔調分析**：MediaRecorder 錄音 + Web Audio 解碼，`pitchTrack()`（自相關法）抽音高、`contour()` 正規化、`analyzePitch()` 算相似度/語速/句尾升降並畫圖。三處 `getUserMedia`（正誤回饋／⑤錄音對比／跟讀）共用 `MIC_CONSTRAINTS`（關掉瀏覽器預設的雜訊抑制／自動增益，那兩個是録音「悶」「忽大忽小」的常見成因）與 `newRecorder()`（明示 128kbps opus，避免瀏覽器預設低位元率造成破音）。
 - **正誤回饋（選用）**：`fbGap()` 取代代換/應答留白的純 sleep，開啟時錄音並 POST 到使用者自填的 STT endpoint（OpenAI 相容），`fbSim()`（Levenshtein + `fbNorm()` 正字法歸一）比對正解後顯示於 `fbArea`；辨識在背景進行不阻塞播放。LLM endpoint 欄位留給開放應答模式。
 - **回合評分**：`roundVerdict()`／`scoreSave()`／`scoreBadge()`／`finishRound()`（localStorage 鍵 `fsi_score`）。回饋開啟的 sub/qa 回合結束結算，`fbCheck` 會把遲到的辨識結果補進去（`roundDone` 旗標）。課程選單徽章由 `fillLessons()` 讀 `scoreBadge()`。
 - **操練中腔調圖**：`fbPitch()` 在留白錄音後沿用⑤的音高管線畫到 `fbCanvas`（`drawPitch` 第三參數選擇畫布）；listen 跟讀也錄（`fbRecord()` 是共用的留白錄音器）。`worstWindow()` 找差異最大區段標紅＋`fbReplaySeg()` 半速切片重播；`fbHints()` 產生文字修正建議。即時跟唱：`liveStart()`（AnalyserNode 每 45ms 跑 `pitchOfFrame()` 自相關）在留白期間把使用者音高即時疊畫在示範軌道上（`liveDraw()`），示範 contour 由 `liveModel()` 快取；`fbRecord()` 第三參數傳句子文字即啟用。
@@ -39,8 +39,10 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 - **今日條**：`todayRender()`／`markPractice()`（streak）／`srsDueAll()`／`lastPracticed()`／`tdPanel()`（漸進揭露）。localStorage 鍵 `fsi_daily`（跨日歸零）與 `fsi_streak`。`finishRound()` 呼叫 `markPractice()`。
 - **間隔複習**：`srs*()` 函式群（Leitner 五盒，localStorage 鍵 `fsi_srs`，每句鍵＝`mode|lesson|id`）。`runFrom(0)` 時 `srsBuildReview()` 把到期句插到 `state.review`（items() 會 concat 在最前）；升降盒由 `fbCheck`（回饋開啟）或 `runFrom` 迴圈（關閉）呼叫 `srsMark()`。句子識別用物件參照 `indexOf`（`srsIdOf`），所以隨機順序下也正確。
 - **自訂教材**：使用者貼句子後產生 `state.customLesson`（`lesson === -1` 時使用）。
+- **影子跟讀（⑦分頁）**：使用者選本機資料夾（`webkitdirectory`，不上傳、不持久化），`shadowClassify(name,relPath)` 依檔名決定分類——大家的日本語風「第N課」命名走課號＋小節關鍵字（`shadowSectionOf()`），課號對齊本工具課程順序；其他沒有這種命名的教材（跟讀書、文法書等）退回用資料夾結構（上層資料夾名）分類。這顆函式同時被「選資料夾」（`shadowIndexFiles()`）跟「匯入分句結果」共用，保證兩條路徑算出同一組 key。A/B 區間可手動設，也可以按「自動偵測分句」把整段音檔丟給 STT（`sttTranscribeFull()`，server 需回傳 `segments`，見下）拿到逐句時間戳＋文字，結果存 localStorage（`shadowSliceKey()`，格式跟 `shadowTextKey()` 一樣是課號＋小節當 key）；`shadowSelectSeg()`／`shadowStepSeg()` 做逐句導覽（上一句／下一句按鈕）。批次預先分析好的結果可以用「📥 匯入預先分析的分句結果」讀外部 JSON manifest（陣列 `[{path, segments}]`，`path` 是選資料夾時會出現的 `webkitRelativePath` 格式）寫進同一套 localStorage 快取，不用在瀏覽器裡一個個音檔重跑。「🎙 跟讀（播放＋錄音）」同步播放選定區間並錄音，播放結束後留 1.5 秒緩衝才真的停止錄音（跟讀常慢半拍，避免尾音被切）。「🔍 講評」重用⑤錄音對比的整套音高管線（`pitchTrack`/`contour`/`drawPitch`/`worstWindow`/`vvMorasFor`/`vvScore`），但參考音直接用 `sliceBuffer()` 從這段真人音檔本身裁出來，不叫 Google TTS、不需要 API key；`worstWindow` 抓到的最大差異段要換算回整軌的絕對秒數（`shadowSeg.t = shadowA + A.t0 + ...`，因為參考音的 `contour().t0` 是相對裁切後片段起點算的）才能讓 `shadowReplaySeg()` 半速重播對到正確位置。
+- **角色扮演（⑧分頁，最小版）**：`ROLEPLAY_SCENARIOS` 資料刻意放在「/\* ================= 狀態」註解**之後**（例如跟 `MINPAIRS` 放一起）——`tests/test-shuffle.js` 用 `lastIndexOf("];", indexOf("狀態"))` 抓 `LESSONS` 陣列收尾，如果在 `LESSONS` 收尾跟狀態註解中間插新陣列會被誤判進 `LESSONS` 的抽取範圍，改資料時要留意這條邊界。每情境依課程文法程度分四級、固定兩輪；`turns[i]` 是 `{ask, cue, accept}`：`ask` 是給 LLM 的指示（這輪要問什麼，不是逐字稿）、`cue` 是顯示給使用者的中文提示詞（不是日文答案）、`accept` 是可接受的日文寫法陣列。`rpAskTurn()` 呼叫 LLM 即時生成 AI 問句，生成後用 `rpValidQuestion()` 檢查有沒有直接洩漏 `accept` 內容，洩題就帶提醒重問（最多 3 次嘗試）才顯示給使用者。使用者作答用 `fbNorm()` 正規化後對 `accept` 做子字串比對（`rpSend()`）算對錯，不再打一次 LLM 當裁判——自架小模型當裁判本身不穩，關鍵字比對更確定也不用等。跟「進度陪伴角色」（`teacherChat*`）完全獨立，不共用歷史／persona，狀態只留在記憶體不寫 localStorage（換分頁再切回來歷史還在，重新整理頁面才會消失，按「開始」會重置）。
 
-`server/` 是自架 STT/LLM 後端（跑在使用者的遠端工作站，非本 repo 部署範圍）：`server.py` 為 FastAPI（faster-whisper ＋ Ollama CORS 代理，只綁 127.0.0.1:8788），`start.sh` 為啟動腳本。改動後需手動部署到工作站。
+`server/` 是自架 STT/LLM 後端（跑在使用者的遠端工作站，非本 repo 部署範圍）：`server.py` 為 FastAPI（faster-whisper ＋ Ollama CORS 代理，只綁 127.0.0.1:8788），`start.sh` 為啟動腳本。`/v1/audio/transcriptions` 除了 `text` 也回傳 `segments`（`[{start,end,text}]`，faster-whisper 內建 VAD 切出來的整句時間戳），供跟讀分頁的自動分句用；只讀 `text` 的舊呼叫方不受影響。改動後需手動部署到工作站。
 
 `bot/` 是日語陪聊 Discord bot（獨立於網頁工具，同樣跑在筆電＋工作站，設計見 `bot/DESIGN.md`）。**token、對話記憶、視窗紀錄等執行期資料一律放 `bot/data/`（已 .gitignore），絕不 commit**——本 repo 是 public。
 
