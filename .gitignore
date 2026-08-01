@@ -5,3 +5,4 @@ bot/config.json
 bot/relay/node_modules/
 bot/relay/package-lock.json
 bot/__pycache__/
+server/__pycache__/

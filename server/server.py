@@ -48,7 +48,11 @@ async def transcriptions(
 ):
     data = await file.read()
     segs, _ = model.transcribe(io.BytesIO(data), language=language or "ja", beam_size=5, vad_filter=True)
-    return {"text": "".join(s.text for s in segs).strip()}
+    segs = list(segs)
+    return {
+        "text": "".join(s.text for s in segs).strip(),
+        "segments": [{"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()} for s in segs],
+    }
 
 
 @app.post("/v1/chat/completions")

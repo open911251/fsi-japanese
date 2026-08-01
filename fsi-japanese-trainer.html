@@ -194,6 +194,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="rec">⑤ 錄音對比</button>
     <button data-mode="minpair">⑥ 聽辨</button>
     <button data-mode="shadow">⑦ 影子跟讀</button>
+    <button data-mode="roleplay">⑧ 角色扮演</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
 </div>
@@ -290,6 +291,8 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="row" style="margin-top:10px;">
     <input type="file" id="shadowDirPick" webkitdirectory multiple accept="audio/*" style="display:none;">
     <button id="shadowPickBtn">📁 選擇音檔資料夾</button>
+    <input type="file" id="shadowImportPick" accept="application/json" style="display:none;">
+    <button id="shadowImportBtn">📥 匯入預先分析的分句結果（JSON）</button>
     <span class="small" id="shadowIdxStatus"></span>
   </div>
   <div class="row" style="margin-top:10px;">
@@ -297,7 +300,16 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <select id="shadowTrackSel" style="flex:1;min-width:160px;" disabled></select>
   </div>
   <audio id="shadowAudio" controls style="width:100%;margin-top:10px;"></audio>
-  <textarea id="shadowText" rows="4" style="width:100%;margin-top:8px;" disabled placeholder="貼上這段對應的課本文字（只需貼一次，會依課號＋小節存在瀏覽器，下次選到同一段自動帶出，方便邊聽邊看稿跟讀）"></textarea>
+  <textarea id="shadowText" rows="4" style="width:100%;margin-top:8px;" disabled placeholder="貼上這段對應的課本文字（只需貼一次，會依課號＋小節存在瀏覽器，下次選到同一段自動帶出，方便邊聽邊看稿跟讀）。或用下面「自動偵測分句」直接讓 STT 幫你切句＋帶文字。"></textarea>
+  <div class="row" style="margin-top:8px;">
+    <button id="shadowSlice" disabled>🔍 自動偵測分句（需先在「本地 AI 設定」填 STT URL）</button>
+    <span class="small" id="shadowSliceStatus"></span>
+  </div>
+  <div id="shadowSliceList" class="small" style="margin-top:4px;max-height:160px;overflow-y:auto;"></div>
+  <div class="row" style="margin-top:6px;">
+    <button id="shadowPrevSeg" disabled>⬅ 上一句</button>
+    <button id="shadowNextSeg" disabled>下一句 ➡</button>
+  </div>
   <div class="row" style="margin-top:8px;">
     <button id="shadowSetA" disabled>🅰 設起點</button>
     <button id="shadowSetB" disabled>🅱 設終點</button>
@@ -306,13 +318,37 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <span class="small" id="shadowABInfo"></span>
   </div>
   <div class="row" style="margin-top:12px;">
-    <button id="shadowRecBtn" disabled>🔴 錄音跟讀</button>
+    <button id="shadowRecBtn" disabled>🎙 跟讀（播放＋錄音）</button>
     <button id="shadowPlayMine" disabled>▶ 聽自己</button>
+    <button id="shadowStop" disabled>⏹ 停止</button>
     <button id="shadowAB" disabled>🔄 連續對比</button>
     <button class="primary" id="shadowDone" disabled>✅ 記錄本次跟讀</button>
   </div>
+  <div class="row" style="margin-top:8px;">
+    <button id="shadowAnalyzeBtn" disabled>🔍 講評</button>
+    <button id="shadowReplaySeg" style="display:none;">🐢 重播差異最大段</button>
+  </div>
+  <canvas id="shadowPitchCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
+  <div id="shadowPitchInfo" class="small" style="margin-top:4px;"></div>
+  <div id="shadowMoraRow" style="margin-top:4px;"></div>
   <div class="status" id="shadowStatus"></div>
   <div class="small" style="margin-top:8px;">音檔只在瀏覽器本機讀取播放，不會上傳、不會存進這個網站——重新整理頁面要重選一次資料夾。</div>
+</div>
+
+<div class="card" id="roleplayCard" style="display:none;">
+  <b>角色扮演</b>　<span class="small">AI 主動問，你依提示詞造句回答（需先在「本地 AI 設定」填 LLM URL）</span>
+  <div class="row" style="margin-top:10px;">
+    <select id="rpScenarioSel" style="flex:1;min-width:260px;"></select>
+    <button id="rpStartBtn">▶ 開始</button>
+  </div>
+  <div id="rpLog" style="margin-top:10px;max-height:260px;overflow-y:auto;"></div>
+  <div class="small" id="rpCue" style="margin-top:8px;font-weight:600;"></div>
+  <div class="row" style="margin-top:6px;">
+    <input type="text" id="rpInput" style="flex:1;" placeholder="用日文回應…" disabled>
+    <button id="rpSendBtn" disabled>送出</button>
+  </div>
+  <div class="status" id="rpStatus"></div>
+  <div class="small" style="margin-top:8px;">第一版：固定情境、純文字、不存對話紀錄。每輪用提示詞的關鍵字比對對錯，AI 問句由 LLM 現場生成、生成後會先檢查沒有直接洩漏答案再顯示。</div>
 </div>
 
 <div class="card" id="customCard" style="display:none;">
@@ -911,6 +947,14 @@ const store={get(k,d){try{return localStorage.getItem(k)??d;}catch(e){return d;}
 let state={mode:"listen",lesson:0,idx:0,running:false,runId:0,customLesson:null,review:[]};
 const audioCache=new Map();
 let currentAudio=null,ttsWarned=false;
+/* 錄音共用設定：關掉瀏覽器預設的雜訊抑制／自動增益（那兩個是「悶」「忽大忽小」的常見成因），
+   保留回音消除；MediaRecorder 明示位元率，避免瀏覽器預設低位元率造成破音／悶。 */
+const MIC_CONSTRAINTS={audio:{echoCancellation:true,noiseSuppression:false,autoGainControl:false,channelCount:1}};
+function newRecorder(stream){
+  const opts={audioBitsPerSecond:128000};
+  if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))opts.mimeType="audio/webm;codecs=opus";
+  return new MediaRecorder(stream,opts);
+}
 
 /* ================= TTS ================= */
 async function synthCloud(text){
@@ -1203,21 +1247,24 @@ function drawMoraTrack(c,W,H,yy,moras){/* 疊在腔調曲線畫布上的理論�
 /* ================= 正誤回饋（自架 STT，選用） ================= */
 let fbStream=null,fbSeq=0;
 function fbOn(){return $("fbChk").checked&&!!$("sttUrl").value.trim();}
-async function sttTranscribe(blob){
+async function sttTranscribeFull(blob){
   const fd=new FormData();
-  fd.append("file",blob,"speech.webm");
+  fd.append("file",blob,blob.name||"speech.webm");
   const model=$("sttModel").value.trim();if(model)fd.append("model",model);
   fd.append("language","ja");fd.append("response_format","json");
   const r=await fetch($("sttUrl").value.trim(),{method:"POST",body:fd});
   if(!r.ok)throw new Error("HTTP "+r.status);
-  return ((await r.json()).text||"").trim();
+  return await r.json();
+}
+async function sttTranscribe(blob){
+  return ((await sttTranscribeFull(blob)).text||"").trim();
 }
 /* 取代原本的純 sleep 留白：回饋開啟時在留白期間錄音；錄不到就退化成純等待 */
 async function fbRecord(ms,id,liveText){
   if(!fbOn()){await sleep(ms,id);return null;}
-  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});}
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);}
   catch(e){$("fbChk").checked=false;setStatus("drillStatus","⚠ 無法使用麥克風，正誤回饋已關閉："+e.message);await sleep(ms,id);return null;}
-  const mr=new MediaRecorder(fbStream);const chunks=[];
+  const mr=newRecorder(fbStream);const chunks=[];
   mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
   mr.start();
   const live=liveText?await liveStart(liveText):null;/* 卡拉OK式即時跟唱視圖 */
@@ -1588,8 +1635,8 @@ function showRecSentence(){
 async function toggleRec(){
   if(recording){mediaRec.stop();return;}
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    mediaRec=new MediaRecorder(stream);recChunks=[];
+    const stream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    mediaRec=newRecorder(stream);recChunks=[];
     mediaRec.ondataavailable=e=>recChunks.push(e.data);
     mediaRec.onstop=()=>{
       stream.getTracks().forEach(t=>t.stop());
@@ -1624,6 +1671,14 @@ let actx=null;
 function actxGet(){if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();return actx;}
 async function decodeUrl(url){const ab=await(await fetch(url)).arrayBuffer();return await actxGet().decodeAudioData(ab);}
 async function decodeMyRec(){const ab=await new Blob(recChunks,{type:"audio/webm"}).arrayBuffer();return await actxGet().decodeAudioData(ab);}
+function sliceBuffer(buf,t0,t1){
+  const sr=buf.sampleRate;
+  const s0=Math.max(0,Math.floor(t0*sr)),s1=Math.min(buf.length,Math.ceil(t1*sr));
+  const n=Math.max(1,s1-s0);
+  const out=actxGet().createBuffer(buf.numberOfChannels,n,sr);
+  for(let c=0;c<buf.numberOfChannels;c++)out.copyToChannel(buf.getChannelData(c).slice(s0,s0+n),c);
+  return out;
+}
 function downmix(buf){const n=buf.length,ch=buf.numberOfChannels;const x=new Float32Array(n);for(let c=0;c<ch;c++){const d=buf.getChannelData(c);for(let i=0;i<n;i++)x[i]+=d[i]/ch;}return{x:x,sr:buf.sampleRate};}
 function resampleTo(x,sr,target){const f=Math.max(1,Math.floor(sr/target));if(f===1)return{x:x,sr:sr};const m=Math.floor(x.length/f);const y=new Float32Array(m);for(let i=0;i<m;i++){let s=0;for(let j=0;j<f;j++)s+=x[i*f+j];y[i]=s/f;}return{x:y,sr:sr/f};}
 function pitchTrack(buf){
@@ -1732,15 +1787,16 @@ function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
   $("shadowCard").style.display=m==="shadow"?"":"none";
+  $("roleplayCard").style.display=m==="roleplay"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
   if(m!=="shadow")shadowPauseAll();
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"){
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -1861,9 +1917,66 @@ $("fbChk").onchange=async()=>{
   store.set("fsi_fb",$("fbChk").checked?"1":"0");
   if(!$("fbChk").checked){$("fbArea").textContent="";return;}
   if(!$("sttUrl").value.trim()){$("fbChk").checked=false;$("fbArea").textContent="⚠ 請先在「本地 AI 設定」填 STT URL";return;}
-  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia({audio:true});$("fbArea").textContent="🎤 正誤回饋已開啟：代換・應答留白時會錄音並比對";}
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);$("fbArea").textContent="🎤 正誤回饋已開啟：代換・應答留白時會錄音並比對";}
   catch(e){$("fbChk").checked=false;$("fbArea").textContent="⚠ 無法使用麥克風："+e.message;}
 };
+
+/* ================= 迷你角色扮演（AI 主動發問＋提示詞造句，最小版） ================= */
+/* 每個情境＝AI 依序問幾輪，每輪 turns[i] 指定：ask＝AI 這輪要問什麼（給LLM的指示，非逐字稿）、
+   cue＝顯示給使用者的中文提示詞（不是日文答案，使用者要自己造句）、accept＝可接受的日文寫法陣列，
+   用 fbNorm() 正規化後看有沒有子字串命中（跟②③現有回饋機制一樣，不用 LLM 當裁判)。
+   AI 每輪問句由 LLM 即時生成，生成後先在背景跑 rpValidQuestion() 檢查沒有直接洩漏 accept 裡的答案，
+   沒過會帶提醒重問一次（最多重試 2 次），確認過再顯示給使用者，減少 LLM 出戲/爆雷。 */
+const ROLEPLAY_SCENARIOS=[
+{id:"lunch1",tier:1,label:"① 午餐去哪裡（1-7課文法）",
+ system:"あなたは友達です。第1〜7課レベルの日本語（です、へ行きます、〜で、〜と）だけを使って、一度に一つだけ質問してください。過去形やて形はまだ使わないでください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「お昼はどこへ行きますか」と聞いてください。",cue:"車站",accept:["駅"]},
+   {ask:"相手の返事を受けて「どうやって行きますか」と聞いてください。",cue:"巴士",accept:["バス"]}
+ ]},
+{id:"weekend1",tier:1,label:"① 週末計畫（1-7課文法）",
+ system:"あなたは友達です。第1〜7課レベルの日本語（です、〜を見ます、〜と）だけを使って、一度に一つだけ質問してください。過去形やて形はまだ使わないでください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「週末、何を見ますか」と聞いてください。",cue:"電影",accept:["映画"]},
+   {ask:"相手の返事を受けて「誰と見ますか」と聞いてください。",cue:"朋友",accept:["友達"]}
+ ]},
+{id:"food1",tier:2,label:"② 想吃什麼／為什麼（8-14課文法）",
+ system:"あなたは友達です。第8〜14課レベルの日本語（形容詞、〜たいです、〜が好きです、から）を使って、一度に一つだけ質問してください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「今日は何が食べたいですか」と聞いてください。",cue:"壽司",accept:["寿司","すし"]},
+   {ask:"相手の返事を受けて「どうしてそれが好きですか」と理由を聞いてください。",cue:"好吃",accept:["おいしい"]}
+ ]},
+{id:"yesterday1",tier:2,label:"② 昨天做了什麼／感想（8-14課文法）",
+ system:"あなたは友達です。第8〜14課レベルの日本語（過去形、形容詞）を使って、一度に一つだけ質問してください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「昨日、何をしましたか」と聞いてください。",cue:"看電影",accept:["映画"]},
+   {ask:"相手の返事を受けて「どうでしたか」と感想を聞いてください。",cue:"有趣",accept:["面白かった","面白い"]}
+ ]},
+{id:"okinawa1",tier:3,label:"③ 旅行經驗／想做的事（15-21課文法）",
+ system:"あなたは友達です。第15〜21課レベルの日本語（〜たことがあります、可能形、〜たら）を使って、一度に一つだけ質問してください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「沖縄に行ったことがありますか、どこに行ったことがありますか」と聞いてください。",cue:"沖繩",accept:["沖縄"]},
+   {ask:"相手の返事を受けて「今度行けたら何がしたいですか」と聞いてください。",cue:"潛水",accept:["ダイビング"]}
+ ]},
+{id:"swim1",tier:3,label:"③ 會不會／什麼時候學的（15-21課文法）",
+ system:"あなたは友達です。第15〜21課レベルの日本語（可能形、普通形＋と思います）を使って、一度に一つだけ質問してください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「泳げますか」と聞いてください。",cue:"會游泳",accept:["泳げます"]},
+   {ask:"相手の返事を受けて「いつ覚えましたか」と聞いてください。",cue:"小學",accept:["小学生","小学校"]}
+ ]},
+{id:"work1",tier:4,label:"④ 上司問工作進度（22-28課文法）",
+ system:"あなたは上司です。第22〜28課レベルの日本語・敬語（つもり、予定、てくれる）を使って、一度に一つだけ質問してください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「この仕事はいつ終わるつもりですか」と聞いてください。",cue:"星期三",accept:["水曜日"]},
+   {ask:"相手の返事を受けて「誰か手伝ってくれますか」と聞いてください。",cue:"田中",accept:["田中"]}
+ ]},
+{id:"client1",tier:4,label:"④ 客戶敬語詢問（22-28課文法）",
+ system:"あなたは取引先の担当者です。敬語（〜ていただけますか等）を使って、一度に一つだけ質問してください。N3レベルの文法・敬語を自由に使ってください。答えを自分から言わないでください。",
+ turns:[
+   {ask:"「何を準備していただけますか」と聞いてください。",cue:"資料",accept:["資料"]},
+   {ask:"相手の返事を受けて「いつまでに準備していただけますか」と聞いてください。",cue:"星期五前",accept:["金曜日"]}
+ ]}
+];
 
 /* ================= 聽辨訓練（最小對立組，標準東京腔） ================= */
 const MINPAIRS=[
@@ -1981,8 +2094,9 @@ function apAnswer(i){
 }
 
 /* ================= 影子跟讀（純跟讀，無腔調分析） ================= */
-/* 音檔來自使用者本機資料夾（webkitdirectory 選取，不持久化、不上傳），依檔名「第N課」＋小節關鍵字
-   建立課號→小節的記憶體索引；A-B 迴圈與錄音都是獨立狀態，跟⑤錄音對比的 mediaRec/recChunks 不共用。 */
+/* 音檔來自使用者本機資料夾（webkitdirectory 選取，不持久化、不上傳）。檔名帶「第N課」的（大家的日本語風）
+   依課號＋小節關鍵字分類、課號對齊本工具課程順序；其他教材沒有這種命名，改用資料夾結構（上層資料夾名）分類。
+   A-B 迴圈與錄音都是獨立狀態，跟⑤錄音對比的 mediaRec/recChunks 不共用。 */
 const SHADOW_SECTION_ORDER=["單語","文型","例文","會話","練習A","練習B","練習C","問題1","問題2","問題3","問題4"];
 function shadowSectionOf(name){
   if(/単語|單語/.test(name))return"單語";
@@ -1994,43 +2108,70 @@ function shadowSectionOf(name){
   if(/練習\s*C/.test(name))return"練習C";
   const m=name.match(/問題[^0-9]*([0-9])/);return m?"問題"+m[1]:null;
 }
-let shadowIndex={},shadowLessonNums=[],shadowUrl=null,shadowA=0,shadowB=null,shadowLoopOn=false;
+let shadowIndex={},shadowGroupKeys=[],shadowUrl=null,shadowA=0,shadowB=null,shadowLoopOn=false;
 let shadowMediaRec=null,shadowRecChunks=[],shadowMyUrl=null,shadowRecording=false;
 let shadowCurLesson=null,shadowCurSection=null;
 function shadowFmt(t){t=Math.max(0,t||0);const mi=Math.floor(t/60),s=Math.floor(t%60);return mi+":"+String(s).padStart(2,"0");}
 function shadowTextKey(n,sec){return"fsi_shadow_text|"+n+"|"+sec;}
+function shadowSliceKey(n,sec){return"fsi_shadow_seg|"+n+"|"+sec;}
+function shadowIsLessonKey(k){return/^\d+$/.test(k);}
+/* 依檔名／相對路徑決定分類 key＋小節名，選資料夾（File.webkitRelativePath）跟匯入分句 manifest（純字串路徑）共用同一套規則 */
+function shadowClassify(name,relPath){
+  const lm=name.match(/第(\d+)課/);
+  if(lm){
+    const sec=shadowSectionOf(name);if(!sec)return null;
+    return{key:String(parseInt(lm[1])),sec};
+  }
+  const parts=(relPath||name).split("/");
+  const key=parts.length>=3?parts[parts.length-2]:parts[0];
+  return{key,sec:name.replace(/\.mp3$/i,"")};
+}
 function shadowIndexFiles(fileList){
   shadowIndex={};
   Array.from(fileList).forEach(f=>{
     if(!/\.mp3$/i.test(f.name))return;
-    const lm=f.name.match(/第(\d+)課/);if(!lm)return;
-    const sec=shadowSectionOf(f.name);if(!sec)return;
-    const n=parseInt(lm[1]);
-    (shadowIndex[n]=shadowIndex[n]||[]).push({section:sec,file:f});
+    const c=shadowClassify(f.name,f.webkitRelativePath);
+    if(!c)return;
+    (shadowIndex[c.key]=shadowIndex[c.key]||[]).push({section:c.sec,file:f});
   });
-  shadowLessonNums=Object.keys(shadowIndex).map(Number).sort((a,b)=>a-b);
-  shadowLessonNums.forEach(n=>shadowIndex[n].sort((a,b)=>SHADOW_SECTION_ORDER.indexOf(a.section)-SHADOW_SECTION_ORDER.indexOf(b.section)));
+  shadowGroupKeys=Object.keys(shadowIndex).sort((a,b)=>{
+    const an=shadowIsLessonKey(a),bn=shadowIsLessonKey(b);
+    if(an&&bn)return parseInt(a)-parseInt(b);
+    if(an!==bn)return an?-1:1;
+    return a.localeCompare(b,undefined,{numeric:true});
+  });
+  shadowGroupKeys.forEach(k=>{
+    shadowIndex[k].sort((a,b)=>shadowIsLessonKey(k)
+      ?SHADOW_SECTION_ORDER.indexOf(a.section)-SHADOW_SECTION_ORDER.indexOf(b.section)
+      :a.file.name.localeCompare(b.file.name,undefined,{numeric:true}));
+  });
 }
 function shadowFillLessonSel(){
   const sel=$("shadowLessonSel");sel.innerHTML="";
-  shadowLessonNums.forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=LESSONS[n-1]?LESSONS[n-1].t:("第"+n+"課");sel.appendChild(o);});
-  sel.disabled=shadowLessonNums.length===0;
+  shadowGroupKeys.forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=shadowIsLessonKey(k)?(LESSONS[k-1]?LESSONS[k-1].t:("第"+k+"課")):k;sel.appendChild(o);});
+  sel.disabled=shadowGroupKeys.length===0;
 }
 function shadowFillTrackSel(){
   const sel=$("shadowTrackSel");sel.innerHTML="";
-  const n=parseInt($("shadowLessonSel").value);
+  const n=$("shadowLessonSel").value;
   (shadowIndex[n]||[]).forEach((t,i)=>{const o=document.createElement("option");o.value=i;o.textContent=t.section;sel.appendChild(o);});
   sel.disabled=!shadowIndex[n]||shadowIndex[n].length===0;
   shadowLoadTrack();
 }
 function shadowSetEnabled(on){
-  ["shadowSetA","shadowSetB","shadowLoop","shadowClearAB","shadowRecBtn","shadowDone","shadowText"].forEach(id=>$(id).disabled=!on);
+  ["shadowSetA","shadowSetB","shadowLoop","shadowClearAB","shadowRecBtn","shadowDone","shadowText","shadowSlice","shadowStop"].forEach(id=>$(id).disabled=!on);
+  if(!on){$("shadowPrevSeg").disabled=true;$("shadowNextSeg").disabled=true;}
 }
-function shadowUpdateABInfo(){$("shadowABInfo").textContent="A "+shadowFmt(shadowA)+(shadowB!=null?"　B "+shadowFmt(shadowB):"　B 未設定");}
+function shadowUpdateABInfo(){$("shadowABInfo").textContent="A "+shadowFmt(shadowA)+(shadowB!=null?"　B "+shadowFmt(shadowB):"　B 未設定");shadowUpdateAnalyzeEnabled();}
+function shadowUpdateAnalyzeEnabled(){$("shadowAnalyzeBtn").disabled=!(shadowB!=null&&shadowMyUrl);}
 function shadowLoadTrack(){
-  const n=parseInt($("shadowLessonSel").value);const list=shadowIndex[n]||[];
+  const n=$("shadowLessonSel").value;const list=shadowIndex[n]||[];
   const t=list[parseInt($("shadowTrackSel").value||0)];
   if(shadowUrl)URL.revokeObjectURL(shadowUrl);
+  if(shadowMyUrl){URL.revokeObjectURL(shadowMyUrl);shadowMyUrl=null;}
+  $("shadowPlayMine").disabled=true;$("shadowAB").disabled=true;
+  shadowSegments=[];shadowSegIdx=-1;$("shadowSliceList").innerHTML="";setStatus("shadowSliceStatus","");$("shadowPrevSeg").disabled=$("shadowNextSeg").disabled=true;
+  $("shadowPitchCanvas").style.display="none";$("shadowPitchInfo").textContent="";renderMoraRow("shadowMoraRow",null);$("shadowReplaySeg").style.display="none";shadowSeg=null;
   if(!t){shadowCurLesson=null;shadowCurSection=null;$("shadowAudio").removeAttribute("src");$("shadowText").value="";shadowSetEnabled(false);return;}
   shadowCurLesson=n;shadowCurSection=t.section;
   shadowUrl=URL.createObjectURL(t.file);
@@ -2039,28 +2180,89 @@ function shadowLoadTrack(){
   shadowA=0;shadowB=null;shadowLoopOn=false;
   $("shadowLoop").textContent="🔁 循環：關";shadowUpdateABInfo();
   shadowSetEnabled(true);
+  const cached=store.get(shadowSliceKey(n,t.section),"");
+  if(cached){
+    try{shadowSegments=JSON.parse(cached);shadowRenderSliceList();setStatus("shadowSliceStatus","✅ 已讀入先前分析過的 "+shadowSegments.length+" 句（快取）。再按一次「自動偵測分句」可重新分析。");if(shadowSegments.length)shadowSelectSeg(0);}
+    catch(e){shadowSegments=[];}
+  }
+}
+let shadowSegments=[],shadowSegIdx=-1;
+async function shadowAutoSlice(){
+  const n=shadowCurLesson,list=shadowIndex[n]||[];
+  const t=list[parseInt($("shadowTrackSel").value||0)];
+  if(!t)return;
+  if(!$("sttUrl").value.trim()){setStatus("shadowSliceStatus","⚠ 請先在「本地 AI 設定」填 STT URL");return;}
+  $("shadowSlice").disabled=true;
+  setStatus("shadowSliceStatus","🔄 分析中…（依音檔長度可能要數十秒，結束前尾端可能出現辨識雜訊，忽略即可）");
+  try{
+    const j=await sttTranscribeFull(t.file);
+    shadowSegments=j.segments||[];
+    shadowRenderSliceList();
+    if(shadowCurLesson!=null)store.set(shadowSliceKey(shadowCurLesson,shadowCurSection),JSON.stringify(shadowSegments));
+    setStatus("shadowSliceStatus","✅ 偵測到 "+shadowSegments.length+" 句（已存起來，下次選到同一段直接讀快取）。");
+    if(shadowSegments.length)shadowSelectSeg(0);
+  }catch(e){setStatus("shadowSliceStatus","❌ 分析失敗："+e.message);}
+  $("shadowSlice").disabled=false;
+}
+function shadowRenderSliceList(){
+  const box=$("shadowSliceList");box.innerHTML="";
+  $("shadowPrevSeg").disabled=$("shadowNextSeg").disabled=shadowSegments.length===0;
+  shadowSegments.forEach((s,i)=>{
+    const d=document.createElement("div");
+    d.dataset.idx=i;
+    d.style.cursor="pointer";d.style.padding="3px 4px";d.style.borderRadius="4px";
+    d.textContent=(i+1)+"　"+shadowFmt(s.start)+"–"+shadowFmt(s.end)+"　"+s.text;
+    d.onclick=()=>shadowSelectSeg(i);
+    box.appendChild(d);
+  });
+}
+/* 選定第 i 句：設 A/B、帶入課本文字、標亮清單裡對應那一行，讓「上一句／下一句」跟點清單走同一條路徑 */
+function shadowSelectSeg(i){
+  if(i<0||i>=shadowSegments.length)return;
+  shadowSegIdx=i;
+  const s=shadowSegments[i];
+  shadowA=s.start;shadowB=s.end;shadowUpdateABInfo();
+  if(shadowCurLesson!=null){$("shadowText").value=s.text;store.set(shadowTextKey(shadowCurLesson,shadowCurSection),s.text);}
+  Array.from($("shadowSliceList").children).forEach(d=>{
+    const on=parseInt(d.dataset.idx)===i;
+    d.style.background=on?"var(--accent,#3a6)":"";
+    d.style.color=on?"#fff":"";
+  });
+  const el=$("shadowSliceList").children[i];if(el)el.scrollIntoView({block:"nearest"});
+  setStatus("shadowSliceStatus","第 "+(i+1)+"/"+shadowSegments.length+" 句，可用 🅰/🅱 微調範圍，或按上一句/下一句切換。");
+}
+function shadowStepSeg(delta){
+  if(!shadowSegments.length)return;
+  shadowSelectSeg(Math.max(0,Math.min(shadowSegments.length-1,shadowSegIdx+delta)));
 }
 function shadowPauseAll(){
   const a=$("shadowAudio");if(a)a.pause();
   if(shadowRecording&&shadowMediaRec)shadowMediaRec.stop();
+  stopAudio();
 }
 async function shadowToggleRec(){
-  if(shadowRecording){shadowMediaRec.stop();return;}
+  if(shadowRecording){shadowMediaRec.stop();$("shadowAudio").pause();return;}
+  const a=$("shadowAudio");if(!a.src){setStatus("shadowStatus","請先選音檔。");return;}
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    shadowMediaRec=new MediaRecorder(stream);shadowRecChunks=[];
+    const stream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    shadowMediaRec=newRecorder(stream);shadowRecChunks=[];
     shadowMediaRec.ondataavailable=e=>shadowRecChunks.push(e.data);
     shadowMediaRec.onstop=()=>{
       stream.getTracks().forEach(t=>t.stop());
       if(shadowMyUrl)URL.revokeObjectURL(shadowMyUrl);
       shadowMyUrl=URL.createObjectURL(new Blob(shadowRecChunks,{type:"audio/webm"}));
-      $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;
-      shadowRecording=false;$("shadowRecBtn").innerHTML="🔴 錄音跟讀";
-      setStatus("shadowStatus","錄好了，按「聽自己」回放。");
+      $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;shadowUpdateAnalyzeEnabled();
+      shadowRecording=false;$("shadowRecBtn").innerHTML="🎙 跟讀（播放＋錄音）";
+      setStatus("shadowStatus","錄好了，按「聽自己」回放，或「連續對比」交叉聽。");
     };
     shadowMediaRec.start();shadowRecording=true;
     $("shadowRecBtn").innerHTML='<span class="rec-dot"></span> 停止';
-    setStatus("shadowStatus","錄音中…跟著音檔一起唸。");
+    setStatus("shadowStatus","🎧 播放示範＋錄音中…跟著一起唸。");
+    shadowPlaySegmentOnce().catch(()=>{}).finally(async()=>{
+      if(shadowMediaRec&&shadowMediaRec.state==="recording")setStatus("shadowStatus","🎧 示範播完，還在錄…把這句說完再等一下會自動停。");
+      await new Promise(r=>setTimeout(r,1500));/* 跟讀常會慢半拍講完，播放結束後留點緩衝再停，避免尾音被切 */
+      if(shadowMediaRec&&shadowMediaRec.state==="recording")shadowMediaRec.stop();
+    });
   }catch(e){setStatus("shadowStatus","無法使用麥克風："+e.message);}
 }
 function shadowPlaySegmentOnce(){
@@ -2074,7 +2276,7 @@ function shadowPlaySegmentOnce(){
     a.addEventListener("timeupdate",onTime);
     a.addEventListener("ended",onEnded,{once:true});
     a.currentTime=shadowA;
-    a.play().catch(e=>{cleanup();reject(e);});
+    a.play().catch(e=>{cleanup();if(e.name==="AbortError"){resolve();}else{reject(e);}});
   });
 }
 function shadowPlayMine(){return shadowMyUrl?playUrl(shadowMyUrl):Promise.resolve();}
@@ -2088,26 +2290,96 @@ async function shadowPlayAB(){
     setStatus("shadowStatus","對比播放完畢。");
   }catch(e){setStatus("shadowStatus","播放失敗："+e.message);}
 }
+let shadowSeg=null;
+async function shadowAnalyze(){
+  if(shadowB==null||!shadowMyUrl){setStatus("shadowStatus","需要先設定區間並錄一次音。");return;}
+  setStatus("shadowStatus","分析中…");
+  try{
+    const full=await decodeUrl(shadowUrl);
+    const ref=sliceBuffer(full,shadowA,shadowB);
+    const my=await decodeUrl(shadowMyUrl);
+    const A=contour(pitchTrack(ref),48),B=contour(pitchTrack(my),48);
+    if(!A||!B){
+      setStatus("shadowStatus","偵測不到足夠的音高（段落太短或太小聲），換一段或錄大聲一點再試。");
+      $("shadowPitchCanvas").style.display="none";renderMoraRow("shadowMoraRow",null);
+      $("shadowPitchInfo").textContent="";$("shadowReplaySeg").style.display="none";shadowSeg=null;
+      return;
+    }
+    const text=$("shadowText").value.trim();
+    const moras=text?await vvMorasFor(text):null;
+    drawPitch(A.pts,B.pts,$("shadowPitchCanvas"),moras);
+    renderMoraRow("shadowMoraRow",moras?await vvScore(text,B,moras):null);
+    const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
+    const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
+    const hints=fbHints(A.pts,B.pts);
+    $("shadowPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%"+(hints.length?"　💡 "+hints.join("、"):"");
+    shadowSeg=null;$("shadowReplaySeg").style.display="none";
+    const wv=worstWindow(A.pts,B.pts);
+    if(wv&&wv.diff>=2){
+      const cv=$("shadowPitchCanvas"),c=cv.getContext("2d");
+      c.fillStyle="rgba(220,60,40,0.14)";
+      c.fillRect(wv.i0/(wv.n-1)*cv.width,0,(wv.i1-wv.i0)/(wv.n-1)*cv.width,cv.height);
+      shadowSeg={t:shadowA+A.t0+A.dur*wv.i0/(wv.n-1),d:A.dur*(wv.i1-wv.i0)/(wv.n-1)};
+      $("shadowReplaySeg").style.display="";
+    }
+    setStatus("shadowStatus","分析完成：紅線＝原音檔、藍線＝你。");
+  }catch(e){setStatus("shadowStatus","分析失敗："+e.message);}
+}
+function shadowReplaySeg(){
+  const g=shadowSeg;if(!g)return;
+  stopAudio();
+  const a=new Audio(shadowUrl);currentAudio=a;
+  a.playbackRate=0.6;try{a.preservesPitch=true;}catch(e){}
+  a.currentTime=Math.max(0,g.t-0.15);
+  const end=g.t+g.d+0.15;
+  a.ontimeupdate=()=>{if(a.currentTime>=end)a.pause();};
+  a.play().catch(()=>{});
+}
 $("shadowPickBtn").onclick=()=>$("shadowDirPick").click();
 $("shadowDirPick").onchange=e=>{
   shadowIndexFiles(e.target.files);
-  const total=shadowLessonNums.reduce((s,n)=>s+shadowIndex[n].length,0);
-  setStatus("shadowIdxStatus",shadowLessonNums.length?("已找到 "+shadowLessonNums.length+" 課、"+total+" 個音檔"):"沒找到符合「第N課」命名的音檔");
+  const total=shadowGroupKeys.reduce((s,n)=>s+shadowIndex[n].length,0);
+  setStatus("shadowIdxStatus",shadowGroupKeys.length?("已找到 "+shadowGroupKeys.length+" 個分類、"+total+" 個音檔"):"沒找到 mp3 音檔");
   shadowFillLessonSel();shadowFillTrackSel();
 };
 $("shadowLessonSel").onchange=shadowFillTrackSel;
 $("shadowTrackSel").onchange=shadowLoadTrack;
+$("shadowSlice").onclick=shadowAutoSlice;
+$("shadowImportBtn").onclick=()=>$("shadowImportPick").click();
+$("shadowImportPick").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const manifest=JSON.parse(await f.text());
+    let n=0;
+    manifest.forEach(entry=>{
+      const name=(entry.path||"").split("/").pop();
+      if(!name||!/\.mp3$/i.test(name))return;
+      const c=shadowClassify(name,entry.path);
+      if(!c)return;
+      store.set(shadowSliceKey(c.key,c.sec),JSON.stringify(entry.segments||[]));
+      n++;
+    });
+    setStatus("shadowIdxStatus","✅ 已匯入 "+n+" 筆分句結果快取，選到對應音檔會自動讀出。");
+    if(shadowCurLesson!=null)shadowLoadTrack();
+  }catch(err){setStatus("shadowIdxStatus","❌ 匯入失敗："+err.message);}
+  e.target.value="";
+};
 $("shadowText").oninput=()=>{if(shadowCurLesson!=null)store.set(shadowTextKey(shadowCurLesson,shadowCurSection),$("shadowText").value);};
 $("shadowSetA").onclick=()=>{shadowA=$("shadowAudio").currentTime;if(shadowB!=null&&shadowA>=shadowB)shadowB=null;shadowUpdateABInfo();};
 $("shadowSetB").onclick=()=>{const b=$("shadowAudio").currentTime;if(b>shadowA){shadowB=b;shadowUpdateABInfo();}};
 $("shadowClearAB").onclick=()=>{shadowA=0;shadowB=null;shadowLoopOn=false;$("shadowLoop").textContent="🔁 循環：關";shadowUpdateABInfo();};
 $("shadowLoop").onclick=()=>{shadowLoopOn=!shadowLoopOn;$("shadowLoop").textContent="🔁 循環："+(shadowLoopOn?"開":"關");};
+$("shadowPrevSeg").onclick=()=>shadowStepSeg(-1);
+$("shadowNextSeg").onclick=()=>shadowStepSeg(1);
+$("shadowStop").onclick=shadowPauseAll;
 $("shadowAudio").addEventListener("timeupdate",()=>{
   if(shadowLoopOn&&shadowB!=null&&$("shadowAudio").currentTime>=shadowB)$("shadowAudio").currentTime=shadowA;
 });
 $("shadowRecBtn").onclick=shadowToggleRec;
 $("shadowPlayMine").onclick=shadowPlayMine;
 $("shadowAB").onclick=shadowPlayAB;
+$("shadowAnalyzeBtn").onclick=shadowAnalyze;
+$("shadowReplaySeg").onclick=shadowReplaySeg;
 $("shadowDone").onclick=()=>{markPractice();setStatus("shadowStatus","已記錄今日練習！繼續跟讀或換下一段。");};
 
 /* ================= 今日條（狀態驅動的每日待辦） ================= */
@@ -2345,6 +2617,87 @@ $("personaAvatarPick").onchange=e=>{
 $("personaAvatarClear").onclick=()=>{store.set("fsi_persona_avatar","");$("personaAvatarPick").value="";teacherChatRender();};
 $("tdStartDate").onchange=()=>{store.set("fsi_start_date",$("tdStartDate").value);tdWeekInfoRender();teacherWeekTableRender();};
 
+/* ================= 迷你角色扮演對話（獨立於進度陪伴角色，不共用歷史／persona） ================= */
+let rpScenario=null,rpHistory=[],rpTurnIdx=-1,rpDone=false,rpLogEntries=[];
+function rpReady(){return!!$("llmUrl").value.trim();}
+function rpFillSel(){
+  const sel=$("rpScenarioSel");sel.innerHTML="";
+  ROLEPLAY_SCENARIOS.forEach(s=>{const o=document.createElement("option");o.value=s.id;o.textContent=s.label;sel.appendChild(o);});
+}
+async function rpLLMCall(messages){
+  const r=await fetch($("llmUrl").value.trim(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:$("llmModel").value.trim()||undefined,messages,stream:false})});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return((await r.json()).choices[0].message.content||"").trim();
+}
+/* 生成的問句若直接包含這輪的答案關鍵字，視為洩題，帶提醒重問（最多3次嘗試） */
+function rpValidQuestion(text,turn){
+  if(!text)return false;
+  const norm=fbNorm(text);
+  return!turn.accept.some(a=>norm.includes(fbNorm(a)));
+}
+async function rpAskTurn(i){
+  const turn=rpScenario.turns[i];
+  $("rpInput").disabled=true;$("rpSendBtn").disabled=true;$("rpCue").textContent="";
+  $("rpStatus").textContent="AI 準備問題中…";
+  let text="",ok=false;
+  for(let attempt=0;attempt<3&&!ok;attempt++){
+    const nudge=attempt>0?"（さっきの質問には答えが入っていました。もう一度、質問だけしてください。答えは言わないでください。）":"";
+    try{text=await rpLLMCall(rpHistory.concat([{role:"system",content:turn.ask+nudge}]));}
+    catch(e){$("rpStatus").textContent="⚠ 連不上（隧道沒開？或伺服器未允許 CORS）";return;}
+    ok=rpValidQuestion(text,turn);
+  }
+  rpHistory.push({role:"system",content:turn.ask});
+  rpHistory.push({role:"assistant",content:text});
+  rpTurnIdx=i;
+  rpLogEntries.push({role:"ai",text:text});
+  rpRender();
+  $("rpCue").textContent="💡 這句用「"+turn.cue+"」造句";
+  $("rpInput").disabled=false;$("rpSendBtn").disabled=false;
+  $("rpStatus").textContent="第 "+(i+1)+"/"+rpScenario.turns.length+" 輪"+(ok?"":"（AI 問句可能不太乾淨，仍可作答）");
+}
+function rpStart(){
+  if(!rpReady()){$("rpStatus").textContent="⚠ 請先在「本地 AI 設定」填 LLM URL";return;}
+  rpScenario=ROLEPLAY_SCENARIOS.find(s=>s.id===$("rpScenarioSel").value);
+  if(!rpScenario)return;
+  rpHistory=[{role:"system",content:rpScenario.system}];
+  rpTurnIdx=-1;rpDone=false;rpLogEntries=[];
+  $("rpInput").value="";$("rpCue").textContent="";
+  rpRender();
+  rpAskTurn(0);
+}
+async function rpSend(userText){
+  if(!rpScenario||rpDone||rpTurnIdx<0)return;
+  const turn=rpScenario.turns[rpTurnIdx];
+  const hit=turn.accept.some(a=>fbNorm(userText).includes(fbNorm(a)));
+  rpHistory.push({role:"user",content:userText});
+  rpLogEntries.push({role:"user",text:userText,hit:hit});
+  rpRender();
+  const next=rpTurnIdx+1;
+  if(next<rpScenario.turns.length){await rpAskTurn(next);}
+  else{rpWrapUp();}
+}
+function rpWrapUp(){
+  rpDone=true;
+  $("rpInput").disabled=true;$("rpSendBtn").disabled=true;$("rpCue").textContent="";
+  const hits=rpLogEntries.filter(e=>e.role==="user"&&e.hit).length;
+  const total=rpLogEntries.filter(e=>e.role==="user").length;
+  $("rpStatus").innerHTML=hits+"/"+total+" 句對到提示詞　"+(hits===total?"✅ 全對！":"再試一次會更熟")+"　按「開始」重來。";
+}
+function rpRender(){
+  const log=$("rpLog");
+  log.innerHTML=rpLogEntries.map(e=>{
+    if(e.role==="ai")return"<div style='margin-top:4px;'>🤖 "+teacherEsc(e.text)+"</div>";
+    return"<div style='margin-top:4px;text-align:right;color:var(--sub);'>"+teacherEsc(e.text)+" "+(e.hit?"✅":"❌")+"</div>";
+  }).join("");
+  log.scrollTop=log.scrollHeight;
+}
+$("rpStartBtn").onclick=rpStart;
+$("rpSendBtn").onclick=()=>{
+  const t=$("rpInput").value.trim();if(!t||rpDone)return;
+  $("rpInput").value="";
+  rpSend(t);
+};
+
 /* ================= 初始化 ================= */
 (function init(){
   $("apiKey").value=store.get("fsi_gtts_key","");
@@ -2363,7 +2716,7 @@ $("tdStartDate").onchange=()=>{store.set("fsi_start_date",$("tdStartDate").value
     if(lines.length){const listen=lines.map(l=>{const p=l.split(/[|｜]/);return[p[0].trim(),"",(p[1]||"").trim()];});
       state.customLesson={t:"自訂教材",g:"自訂內容",listen,sub:[],qa:[],build:null};}}
   planAdvanceIfNewDay();state.lesson=plan.lesson;
-  fillLessons();updateProg();todayRender();
+  fillLessons();updateProg();todayRender();rpFillSel();
   if(window.speechSynthesis)speechSynthesis.getVoices();
 })();
 </script>
