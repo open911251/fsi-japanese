@@ -21,6 +21,7 @@ LESSONS.forEach((L, i) => {
   });
   if (!Array.isArray(L.qa)) bad(i, "qa 缺失");
   else L.qa.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `qa[${j}] 欄位數 ${x.length}≠5`); });
+  if (L.trans) L.trans.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `trans[${j}] 欄位數 ${x.length}≠5`); });
   if (!L.build || !Array.isArray(L.build.full) || L.build.full.length !== 3) bad(i, "build.full 欄位數 ≠3");
   else if (!Array.isArray(L.build.parts) || L.build.parts.some(p => typeof p !== "string")) bad(i, "build.parts 非字串陣列");
 });

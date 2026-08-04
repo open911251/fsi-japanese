@@ -192,6 +192,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="sub">② 代換</button>
     <button data-mode="qa">③ 應答</button>
     <button data-mode="build">④ 逐段累加</button>
+    <button data-mode="trans">🔁 轉換</button>
     <button data-mode="rec">⑤ 錄音對比</button>
     <button data-mode="minpair">⑥ 聽辨</button>
     <button data-mode="shadow">⑦ 影子跟讀</button>
@@ -417,7 +418,13 @@ qa:[
 ["陳さんは学生ですか。","ちんさんは がくせいですか。","はい、学生です。","はい、がくせいです。","陳先生是學生嗎？→ 是的。"],
 ["田中さんは先生ですか。","たなかさんは せんせいですか。","いいえ、先生じゃありません。会社員です。","いいえ、せんせいじゃありません。かいしゃいんです。","田中是老師嗎？→ 不，是公司職員。"],
 ["あの人はだれですか。","あのひとは だれですか。","あの人は山田さんです。","あのひとは やまださんです。","那個人是誰？→ 是山田先生。"]],
-build:{full:["田中さんは日本の会社の会社員です。","たなかさんは にほんのかいしゃの かいしゃいんです。","田中先生是日本公司的職員。"],parts:["会社員です。","会社の会社員です。","日本の会社の会社員です。","田中さんは日本の会社の会社員です。"]}},
+build:{full:["田中さんは日本の会社の会社員です。","たなかさんは にほんのかいしゃの かいしゃいんです。","田中先生是日本公司的職員。"],parts:["会社員です。","会社の会社員です。","日本の会社の会社員です。","田中さんは日本の会社の会社員です。"]},
+trans:[
+["「わたしは学生です」を否定形にしてください。","「わたしは がくせいです」を ひていけいに してください。","わたしは学生じゃありません。","わたしは がくせいじゃありません。","請把「我是學生」改成否定形。→ 我不是學生。"],
+["「田中さんは先生じゃありません」を肯定形にしてください。","「たなかさんは せんせいじゃありません」を こうていけいに してください。","田中さんは先生です。","たなかさんは せんせいです。","請把「田中先生不是老師」改成肯定形。→ 田中先生是老師。"],
+["「山田さんは会社員です」を疑問文にしてください。","「やまださんは かいしゃいんです」を ぎもんぶんに してください。","山田さんは会社員ですか。","やまださんは かいしゃいんですか。","請把「山田先生是公司職員」改成疑問句。→ 山田先生是公司職員嗎？"],
+["「わたしは医者です」を否定形にしてください。","「わたしは いしゃです」を ひていけいに してください。","わたしは医者じゃありません。","わたしは いしゃじゃありません。","請把「我是醫生」改成否定形。→ 我不是醫生。"],
+["「あの人はアメリカ人です」を疑問文にしてください。","「あのひとは アメリカじんです」を ぎもんぶんに してください。","あの人はアメリカ人ですか。","あのひとは アメリカじんですか。","請把「那個人是美國人」改成疑問句。→ 那個人是美國人嗎？"]]},
 
 {t:"第2課 これ・それ・あれ（指示詞）",g:"これ／それ／あれ、N の N、だれの",
 listen:[
@@ -1529,14 +1536,14 @@ function scoreSave(v){
 }
 function scoreBadge(i){/* 取已練模式中較弱的一項當精熟度下限 */
   const L=scores[i];if(!L)return"";
-  const vals=["sub","qa","build"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
+  const vals=["sub","qa","build","trans"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
   if(!vals.length)return"";
   const b=Math.min.apply(null,vals);
   return b>=75?"　✅"+b+"%":"　⚠"+b+"%";
 }
 function finishRound(){/* 回合結算；遲到的 STT 結果會再次呼叫以更新 */
   const v=roundVerdict(roundStats);
-  if(!v||(state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="build")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
+  if(!v||(state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="build"&&state.mode!=="trans")){setStatus("drillStatus","✅ 本輪完成！可換模式或再來一輪。");return;}
   scoreSave(v);
   const stat="本輪 "+v.avg+"%（✅"+v.ok+" 🔶"+v.mid+" ❌"+v.bad+"）";
   const nxt=state.lesson>=0&&state.lesson<LESSONS.length-1?LESSONS[state.lesson+1].t:"";
@@ -1575,6 +1582,7 @@ function srsResolve(k){
   const p=k.split("|");const m=p[0],L=LESSONS[parseInt(p[1])];if(!L)return null;
   if(m==="listen"){const it=L.listen[parseInt(p[2])];return it?{key:k,src:L.t,it:it}:null;}
   if(m==="qa"){const it=L.qa[parseInt(p[2])];return it?{key:k,src:L.t,it:it}:null;}
+  if(m==="trans"){const it=(L.trans||[])[parseInt(p[2])];return it?{key:k,src:L.t,it:it}:null;}
   if(m==="sub"){const q=p[2].split("-");const s=L.sub[parseInt(q[0])];const c=s&&s.cues[parseInt(q[1])];return c?{key:k,src:L.t,it:{type:"cue",s:s,c:c}}:null;}
   return null;
 }
@@ -1584,12 +1592,13 @@ function srsIdOf(i){/* items() 索引 → SRS 鍵；不可排程者回 null */
   const it=items()[i];const L=curLesson();if(!L||!it)return null;
   if(state.mode==="listen"){const j=L.listen.indexOf(it);return j<0?null:srsKey("listen",state.lesson,j);}
   if(state.mode==="qa"){const j=L.qa.indexOf(it);return j<0?null:srsKey("qa",state.lesson,j);}
+  if(state.mode==="trans"){const j=(L.trans||[]).indexOf(it);return j<0?null:srsKey("trans",state.lesson,j);}
   if(state.mode==="sub"){if(it.type!=="cue")return null;const pi=L.sub.indexOf(it.s),ci=it.s.cues.indexOf(it.c);return(pi<0||ci<0)?null:srsKey("sub",state.lesson,pi+"-"+ci);}
   return null;
 }
 function srsBuildReview(){
   state.review=[];
-  if(state.mode!=="listen"&&state.mode!=="sub"&&state.mode!=="qa")return;
+  if(state.mode!=="listen"&&state.mode!=="sub"&&state.mode!=="qa"&&state.mode!=="trans")return;
   srsDue().slice(0,5).forEach(k=>{const r=srsResolve(k);if(r)state.review.push(r);});
 }
 
@@ -1598,6 +1607,7 @@ function itemsRaw(){
   if(state.mode==="listen")return L.listen;
   if(state.mode==="sub"){const map=subCapMap();const arr=[];L.sub.forEach(s=>{const cues=map.get(s);arr.push({type:"base",s});if($("prevChk").checked)cues.forEach(c=>arr.push({type:"prev",s,c}));cues.forEach(c=>arr.push({type:"cue",s,c}));});return arr;}
   if(state.mode==="qa")return L.qa;
+  if(state.mode==="trans")return L.trans||[];
   if(state.mode==="build"){const b=L.build;return b?b.parts.map((p,i)=>({p,last:i===b.parts.length-1,b})):[];}
   return[];
 }
@@ -1622,11 +1632,11 @@ let shufSeed=1,shufCache={key:"",arr:null};
 function items(){
   const raw=itemsRaw();
   let arr=raw;
-  if($("shuffleOrd").checked&&(state.mode==="sub"||state.mode==="qa")){
+  if($("shuffleOrd").checked&&(state.mode==="sub"||state.mode==="qa"||state.mode==="trans")){
     const key=state.mode+"|"+state.lesson+"|"+shufSeed+"|"+subCapSeed+"|"+subCap()+"|"+$("prevChk").checked;
     if(shufCache.key!==key){
       let sh;
-      if(state.mode==="qa")sh=shuffle(raw);
+      if(state.mode==="qa"||state.mode==="trans")sh=shuffle(raw);
       else{const map=subCapMap();sh=[];curLesson().sub.forEach(s=>{sh.push({type:"base",s});const cues=map.get(s);if($("prevChk").checked)cues.forEach(c=>sh.push({type:"prev",s,c}));shuffle(cues).forEach(c=>sh.push({type:"cue",s,c}));});}
       shufCache={key:key,arr:sh};
     }
@@ -1649,7 +1659,7 @@ function updateProg(){
   $("prog").textContent=n?("第 "+(state.idx+1)+" / "+n+" 句　·　"+modeName()+rev+src):"";
   $("barFill").style.width=n?((state.idx)/n*100)+"%":"0";
 }
-function modeName(){return{listen:"聽讀：聽 → 大聲跟讀",sub:"代換：聽提示詞 → 說出新句 → 聽解答",qa:"應答：聽問題 → 自己回答 → 聽示範",build:"逐段累加：由句尾往前逐段跟讀"}[state.mode]||"";}
+function modeName(){return{listen:"聽讀：聽 → 大聲跟讀",sub:"代換：聽提示詞 → 說出新句 → 聽解答",qa:"應答：聽問題 → 自己回答 → 聽示範",build:"逐段累加：由句尾往前逐段跟讀",trans:"轉換：聽指示句 → 自己套規則變化 → 聽正解"}[state.mode]||"";}
 
 /* ================= 訓練流程 ================= */
 async function playItem(i,id){
@@ -1682,11 +1692,11 @@ async function playItem(i,id){
       setStatus("drillStatus","🔊 解答…");await say(ans);if(!ok())return false;
       await sleep(gapFor(ans)*0.7,id);
     }
-  }else if(state.mode==="qa"){
+  }else if(state.mode==="qa"||state.mode==="trans"){
     const[q,qk,a,ak,cn]=arr[i];
     showText(q,qk,"");
-    setStatus("drillStatus","🔊 問題…");await say(q);if(!ok())return false;
-    setStatus("drillStatus","🗣 自己回答！");await fbGap(gapFor(a)*1.3,id,a,ak,srsIdOf(i));if(!ok())return false;
+    setStatus("drillStatus",state.mode==="trans"?"🔊 轉換指示…":"🔊 問題…");await say(q);if(!ok())return false;
+    setStatus("drillStatus",state.mode==="trans"?"🗣 自己變化看看！":"🗣 自己回答！");await fbGap(gapFor(a)*1.3,id,a,ak,srsIdOf(i));if(!ok())return false;
     showText(q,qk,cn);
     setStatus("drillStatus","🔊 示範解答…");await say(a);if(!ok())return false;
     showText(a,ak,cn);
@@ -1722,6 +1732,7 @@ function allSentences(){
   (L.listen||[]).forEach(x=>out.push(x));
   (L.sub||[]).forEach(s=>{out.push(s.base);s.cues.forEach(c=>out.push([c[1],c[2],c[3]]));});
   (L.qa||[]).forEach(q=>{out.push([q[0],q[1],""]);out.push([q[2],q[3],q[4]]);});
+  (L.trans||[]).forEach(q=>{out.push([q[0],q[1],""]);out.push([q[2],q[3],q[4]]);});
   if(L.build)out.push(L.build.full);
   return out;
 }
@@ -1897,6 +1908,7 @@ function copyLessonPool(L){
     (p.cues||[]).forEach(c=>out.push([c[1],c[2],c[3]]));
   });
   (L.qa||[]).forEach(q=>{out.push([q[0],q[1],q[4]]);out.push([q[2],q[3],q[4]]);});
+  (L.trans||[]).forEach(q=>{out.push([q[0],q[1],q[4]]);out.push([q[2],q[3],q[4]]);});
   if(L.build&&L.build.full)out.push([L.build.full[0],L.build.full[1],L.build.full[2]]);
   return out;
 }
@@ -2584,7 +2596,7 @@ if(plan.lesson==null)plan={lesson:0,day:1,checked:todayKey(),forced:false};
 function planSave(){store.set("fsi_plan",JSON.stringify(plan));}
 function planMastered(i){
   const L=scores[i];if(!L)return false;
-  const vals=["sub","qa","build"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
+  const vals=["sub","qa","build","trans"].map(m=>L[m]&&L[m].best).filter(x=>x!=null);
   return vals.length>0&&Math.min.apply(null,vals)>=75;
 }
 function planAdvanceIfNewDay(){
@@ -2628,7 +2640,7 @@ function srsDueAll(){
 }
 function lastPracticed(){
   let best=null;
-  Object.keys(scores).forEach(l=>{["sub","qa","build"].forEach(m=>{const e=scores[l]&&scores[l][m];if(e&&e.t&&(!best||e.t>best.t))best={lesson:parseInt(l),mode:m,last:e.last,t:e.t};});});
+  Object.keys(scores).forEach(l=>{["sub","qa","build","trans"].forEach(m=>{const e=scores[l]&&scores[l][m];if(e&&e.t&&(!best||e.t>best.t))best={lesson:parseInt(l),mode:m,last:e.last,t:e.t};});});
   return best;
 }
 const TD_MODENAME={listen:"聽讀",sub:"代換",qa:"應答",build:"逐段"};

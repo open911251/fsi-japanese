@@ -29,7 +29,7 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 - **`LESSONS` 陣列**（約 367–942 行）：28 課教材資料，每課一個物件 `{t, g, listen, sub, qa, build}`。這是檔案的主體。
 - **狀態機**：全域 `state` 物件（`mode`/`lesson`/`idx`/`running`/`runId`）。`runId` 遞增用於取消進行中的非同步播放迴圈（`sleep()` 會輪詢 `runId` 提早結束）。
 - **語音層**：`say()` 優先走 `synthCloud()`（Google Cloud TTS REST API，key 存 localStorage），失敗或無 key 時退回 `speakBrowser()`（Web Speech API）。
-- **四種練習模式**：`playItem()` 依 `state.mode`（listen/sub/qa/build）決定播放與停頓流程；`runFrom()` 是主迴圈。sub 模式的項目有三種 type：`base`（基本句）、`prev`（代換詞預習，開關控制，不進 SRS）、`cue`（正式出題）。
+- **五種練習模式**：`playItem()` 依 `state.mode`（listen/sub/qa/build/trans）決定播放與停頓流程；`runFrom()` 是主迴圈。sub 模式的項目有三種 type：`base`（基本句）、`prev`（代換詞預習，開關控制，不進 SRS）、`cue`（正式出題）。trans（轉換操練，🔁分頁）沿用 qa 的資料格式與播放邏輯（`playItem` 的 `qa`/`trans` 是同一分支）——給一句已學過的句子＋轉換指示（肯定→否定／過去／疑問），要自己套文法規則變出來，跟代換操練的「套現成詞」不同，練的是規則內化；資料存在每課的 `trans` 欄位（選填，目前只有第1課有內容），格式跟 `qa` 完全相同（5欄 `[指示句,指示假名,答案,答案假名,中文]`）。
 - **錄音與腔調分析**：MediaRecorder 錄音 + Web Audio 解碼，`pitchTrack()`（自相關法）抽音高、`contour()` 正規化、`analyzePitch()` 算相似度/語速/句尾升降並畫圖。三處 `getUserMedia`（正誤回饋／⑤錄音對比／跟讀）共用 `MIC_CONSTRAINTS`（關掉瀏覽器預設的雜訊抑制／自動增益，那兩個是録音「悶」「忽大忽小」的常見成因）與 `newRecorder()`（明示 128kbps opus，避免瀏覽器預設低位元率造成破音）。
 - **正誤回饋（選用）**：`fbGap()` 取代代換/應答留白的純 sleep，開啟時錄音並 POST 到使用者自填的 STT endpoint（OpenAI 相容），`fbSim()`（Levenshtein + `fbNorm()` 正字法歸一）比對正解後顯示於 `fbArea`；辨識在背景進行不阻塞播放。LLM endpoint 欄位留給開放應答模式。
 - **回合評分**：`roundVerdict()`／`scoreSave()`／`scoreBadge()`／`finishRound()`（localStorage 鍵 `fsi_score`）。回饋開啟的 sub/qa 回合結束結算，`fbCheck` 會把遲到的辨識結果補進去（`roundDone` 旗標）。課程選單徽章由 `fillLessons()` 讀 `scoreBadge()`。
@@ -52,6 +52,7 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 - `sub`：每個練習為 `{p, base, cues}`；`base` 3 欄，`cues` 每項 4 欄 `[提示詞, 日文, かな, 中文]`
 - `qa`：每項 5 欄 `[問題, 問題かな, 答案, 答案かな, 中文]`
 - `build`：`{full, parts}`；`full` 3 欄，`parts` 為由短到長的字串陣列
+- `trans`（選填，轉換操練用）：格式跟 `qa` 相同，每項 5 欄 `[指示句, 指示かな, 答案, 答案かな, 中文]`，指示句要是完整可唸的日文句子（例如「「わたしは学生です」を否定形にしてください。」），不要只寫「→否定形」這種符號，TTS 會照著唸
 - **改完教材必須用 node 驗證欄位數和 JS 語法**，欄位數錯了播放流程會壞掉
 
 ## 規則
