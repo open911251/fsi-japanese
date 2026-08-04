@@ -195,6 +195,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="minpair">⑥ 聽辨</button>
     <button data-mode="shadow">⑦ 影子跟讀</button>
     <button data-mode="roleplay">⑧ 角色扮演</button>
+    <button data-mode="copy">📝 抄寫</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
 </div>
@@ -322,6 +323,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button id="shadowPlayMine" disabled>▶ 聽自己</button>
     <button id="shadowStop" disabled>⏹ 停止</button>
     <button id="shadowAB" disabled>🔄 連續對比</button>
+    <button id="shadowDuet" disabled>🎧 同時播放（像卡拉OK）</button>
     <button class="primary" id="shadowDone" disabled>✅ 記錄本次跟讀</button>
   </div>
   <div class="row" style="margin-top:8px;">
@@ -330,6 +332,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <canvas id="shadowPitchCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="shadowPitchInfo" class="small" style="margin-top:4px;"></div>
+  <div id="shadowContentInfo" class="small" style="margin-top:4px;"></div>
   <div id="shadowMoraRow" style="margin-top:4px;"></div>
   <div class="status" id="shadowStatus"></div>
   <div class="small" style="margin-top:8px;">音檔只在瀏覽器本機讀取播放，不會上傳、不會存進這個網站——重新整理頁面要重選一次資料夾。</div>
@@ -349,6 +352,23 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <div class="status" id="rpStatus"></div>
   <div class="small" style="margin-top:8px;">第一版：固定情境、純文字、不存對話紀錄。每輪用提示詞的關鍵字比對對錯，AI 問句由 LLM 現場生成、生成後會先檢查沒有直接洩漏答案再顯示。</div>
+</div>
+
+<div class="card" id="copyCard" style="display:none;">
+  <b>抄寫清單</b>　<span class="small">照著清單邊聽邊抄在紙上，寫的動作留在紙上，這裡只負責出題跟播音</span>
+  <div class="row" style="margin-top:10px;">
+    <select id="copySource" style="flex:1;min-width:200px;">
+      <option value="lesson">目前課程（聽讀＋代換＋應答＋逐段全部句子）</option>
+      <option value="custom">自訂教材（貼過的內容）</option>
+      <option value="shadow">跟讀已分析的句子（隨機抽 20 句，真人音檔）</option>
+    </select>
+    <button id="copyReroll" style="display:none;">🔀 換一批</button>
+  </div>
+  <div class="row" style="margin-top:8px;">
+    <label class="opt"><input type="checkbox" id="copyHideKana"> 隱藏假名</label>
+    <label class="opt"><input type="checkbox" id="copyHideCn"> 隱藏中文</label>
+  </div>
+  <div id="copyList" style="margin-top:10px;"></div>
 </div>
 
 <div class="card" id="customCard" style="display:none;">
@@ -377,12 +397,20 @@ sub:[{p:"わたしは ＿＿ です。",base:["わたしは学生です。","わ
 ["会社員","わたしは会社員です。","わたしは かいしゃいんです。","我是公司職員。"],
 ["エンジニア","わたしはエンジニアです。","わたしは エンジニアです。","我是工程師。"],
 ["大学生","わたしは大学生です。","わたしは だいがくせいです。","我是大學生。"],
-["銀行員","わたしは銀行員です。","わたしは ぎんこういんです。","我是銀行員。"]]},
+["銀行員","わたしは銀行員です。","わたしは ぎんこういんです。","我是銀行員。"],
+["看護師","わたしは看護師です。","わたしは かんごしです。","我是護理師。"],
+["公務員","わたしは公務員です。","わたしは こうむいんです。","我是公務員。"],
+["デザイナー","わたしはデザイナーです。","わたしは デザイナーです。","我是設計師。"],
+["主婦","わたしは主婦です。","わたしは しゅふです。","我是家庭主婦。"]]},
 {p:"田中さんは ＿＿ じゃありません。",base:["田中さんは学生じゃありません。","たなかさんは がくせいじゃありません。","田中先生不是學生。"],cues:[
 ["先生","田中さんは先生じゃありません。","たなかさんは せんせいじゃありません。","田中先生不是老師。"],
 ["医者","田中さんは医者じゃありません。","たなかさんは いしゃじゃありません。","田中先生不是醫生。"],
 ["アメリカ人","田中さんはアメリカ人じゃありません。","たなかさんは アメリカじんじゃありません。","田中先生不是美國人。"],
-["エンジニア","田中さんはエンジニアじゃありません。","たなかさんは エンジニアじゃありません。","田中先生不是工程師。"]]}],
+["エンジニア","田中さんはエンジニアじゃありません。","たなかさんは エンジニアじゃありません。","田中先生不是工程師。"],
+["警察官","田中さんは警察官じゃありません。","たなかさんは けいさつかんじゃありません。","田中先生不是警察。"],
+["韓国人","田中さんは韓国人じゃありません。","たなかさんは かんこくじんじゃありません。","田中先生不是韓國人。"],
+["弁護士","田中さんは弁護士じゃありません。","たなかさんは べんごしじゃありません。","田中先生不是律師。"],
+["記者","田中さんは記者じゃありません。","たなかさんは きしゃじゃありません。","田中先生不是記者。"]]}],
 qa:[
 ["お名前は？","おなまえは？","陳です。どうぞよろしく。","ちんです。どうぞよろしく。","您貴姓？→ 我姓陳，請多指教。"],
 ["陳さんは学生ですか。","ちんさんは がくせいですか。","はい、学生です。","はい、がくせいです。","陳先生是學生嗎？→ 是的。"],
@@ -402,12 +430,20 @@ sub:[{p:"これは ＿＿ です。",base:["これは本です。","これは �
 ["鉛筆","これは鉛筆です。","これは えんぴつです。","這是鉛筆。"],
 ["カメラ","これはカメラです。","これは カメラです。","這是相機。"],
 ["パソコン","これはパソコンです。","これは パソコンです。","這是電腦。"],
-["手帳","これは手帳です。","これは てちょうです。","這是記事本。"]]},
+["手帳","これは手帳です。","これは てちょうです。","這是記事本。"],
+["財布","これは財布です。","これは さいふです。","這是錢包。"],
+["眼鏡","これは眼鏡です。","これは めがねです。","這是眼鏡。"],
+["スマホ","これはスマホです。","これは スマホです。","這是智慧型手機。"],
+["鍵","これは鍵です。","これは かぎです。","這是鑰匙。"]]},
 {p:"それは ＿＿ のです。",base:["それはわたしのです。","それは わたしのです。","那是我的。"],cues:[
 ["田中さん","それは田中さんのです。","それは たなかさんのです。","那是田中先生的。"],
 ["先生","それは先生のです。","それは せんせいのです。","那是老師的。"],
 ["会社","それは会社のです。","それは かいしゃのです。","那是公司的。"],
-["友達","それは友達のです。","それは ともだちのです。","那是朋友的。"]]}],
+["友達","それは友達のです。","それは ともだちのです。","那是朋友的。"],
+["部長","それは部長のです。","それは ぶちょうのです。","那是經理的。"],
+["学校","それは学校のです。","それは がっこうのです。","那是學校的。"],
+["同僚","それは同僚のです。","それは どうりょうのです。","那是同事的。"],
+["母","それは母のです。","それは ははのです。","那是我媽媽的。"]]}],
 qa:[
 ["これは何ですか。","これは なんですか。","それはノートです。","それは ノートです。","這是什麼？→ 那是筆記本。"],
 ["それはあなたの傘ですか。","それは あなたのかさですか。","はい、わたしのです。","はい、わたしのです。","那是你的傘嗎？→ 是我的。"],
@@ -427,7 +463,11 @@ sub:[{p:"＿＿ はどこですか。",base:["トイレはどこですか。","�
 ["受付","受付はどこですか。","うけつけは どこですか。","櫃台在哪？"],
 ["食堂","食堂はどこですか。","しょくどうは どこですか。","餐廳在哪？"],
 ["事務所","事務所はどこですか。","じむしょは どこですか。","辦公室在哪？"],
-["駅","駅はどこですか。","えきは どこですか。","車站在哪？"]]}],
+["駅","駅はどこですか。","えきは どこですか。","車站在哪？"],
+["会議室","会議室はどこですか。","かいぎしつは どこですか。","會議室在哪？"],
+["コンビニ","コンビニはどこですか。","コンビニは どこですか。","便利商店在哪？"],
+["郵便局","郵便局はどこですか。","ゆうびんきょくは どこですか。","郵局在哪？"],
+["駐車場","駐車場はどこですか。","ちゅうしゃじょうは どこですか。","停車場在哪？"]]}],
 qa:[
 ["トイレはどこですか。","トイレは どこですか。","あそこです。","あそこです。","廁所在哪？→ 在那邊。"],
 ["田中さんはどこですか。","たなかさんは どこですか。","会議室です。","かいぎしつです。","田中在哪？→ 在會議室。"],
@@ -1291,7 +1331,7 @@ async function fbPitch(blob,text){
     renderMoraRow("fbMoraRow",await vvScore(text,B,moras));
     const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
     const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
-    const hints=fbHints(A.pts,B.pts);
+    const hints=fbHints(A.pts,B.pts,text);
     $("fbPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%"+(hints.length?"　💡 "+hints.join("、"):"");
     /* 找差異最大的區段：標紅底＋提供半速切片重播（平均差 ≥2 半音才顯示） */
     fbSeg=null;$("fbReplaySeg").style.display="none";
@@ -1305,7 +1345,8 @@ async function fbPitch(blob,text){
     }
   }catch(e){}
 }
-function fbHints(A,B){/* 把曲線差異翻譯成可執行的修正指令 */
+function endsAsQuestion(text){return/[か？?]$/.test((text||"").trim().replace(/[。.!！\s]+$/,""));}
+function fbHints(A,B,text){/* 把曲線差異翻譯成可執行的修正指令 */
   const seg=(p,a,b)=>p.slice(Math.floor(p.length*a),Math.ceil(p.length*b));
   const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
   const h=[];
@@ -1313,7 +1354,7 @@ function fbHints(A,B){/* 把曲線差異翻譯成可執行的修正指令 */
   if(dHead>2)h.push("句首起音壓低一點");else if(dHead<-2)h.push("句首起音抬高一點");
   const sA=segSlope(seg(A,0.7,1)),sB=segSlope(seg(B,0.7,1));
   if(sA<-1.5&&sB>-0.3)h.push("句尾要降下來（示範是下降的）");
-  else if(sA>1.5&&sB<0.3)h.push("句尾要揚上去（疑問語調）");
+  else if(sA>1.5&&sB<0.3)h.push(endsAsQuestion(text)?"句尾要揚上去（疑問語調）":"句尾跟示範方向相反，示範音高是上揚的");
   else{const dTail=mean(seg(B,0.67,1))-mean(seg(A,0.67,1));if(Math.abs(dTail)>2.5)h.push(dTail>0?"句尾整體偏高":"句尾整體偏低");}
   return h;
 }
@@ -1767,8 +1808,9 @@ async function analyzePitch(){
       else if(dd<-1.8)msgs.push("📉 "+pn[0]+"：你比示範低約 "+(-dd).toFixed(1)+" 半音，抬高一點。");
     }
     const endA=segSlope(seg(A.pts,0.7,1)),endB=segSlope(seg(B.pts,0.7,1));
-    if(endA<-1&&endB>0.5)msgs.push("⚠ 句尾方向相反：示範是下降調，你上揚了（中文語尾習慣）。日語直述句的句尾要往下掉。");
-    else if(endA>1&&endB<-0.5)msgs.push("⚠ 句尾方向相反：示範上揚（疑問句），你下降了。句尾「か」要往上揚。");
+    const isQ=endsAsQuestion(s[0]);
+    if(endA<-1&&endB>0.5)msgs.push(isQ?"⚠ 句尾方向相反：示範下降，你上揚了。":"⚠ 句尾方向相反：示範是下降調，你上揚了（中文語尾習慣）。日語直述句的句尾要往下掉。");
+    else if(endA>1&&endB<-0.5)msgs.push(isQ?"⚠ 句尾方向相反：示範上揚（疑問句），你下降了。句尾「か」要往上揚。":"⚠ 句尾方向相反：示範是上揚的，你下降了。");
     else msgs.push("✓ 句尾方向與示範一致。");
     fb.innerHTML=msgs.join("<br>");
     setStatus("recStatus","分析完成：紅線＝示範、藍線＝你（已對齊時間軸與基頻，只比較曲線形狀）。");
@@ -1783,20 +1825,71 @@ function fillLessons(){
   sel.value=state.lesson;
   $("grammarInfo").textContent="文法重點：" + (curLesson()?curLesson().g:"");
 }
+/* 抄寫清單：純內容產生器，不驗證使用者有沒有真的動手抄——那部分留在紙上 */
+function copyLessonPool(L){
+  const out=[];
+  (L.listen||[]).forEach(s=>out.push([s[0],s[1],s[2]]));
+  (L.sub||[]).forEach(p=>{
+    out.push([p.base[0],p.base[1],p.base[2]]);
+    (p.cues||[]).forEach(c=>out.push([c[1],c[2],c[3]]));
+  });
+  (L.qa||[]).forEach(q=>{out.push([q[0],q[1],q[4]]);out.push([q[2],q[3],q[4]]);});
+  if(L.build&&L.build.full)out.push([L.build.full[0],L.build.full[1],L.build.full[2]]);
+  return out;
+}
+function copyShadowPool(n){
+  const pool=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith("fsi_shadow_seg|"))continue;
+    try{JSON.parse(localStorage.getItem(k)||"[]").forEach(s=>{if(s.text&&s.text.trim())pool.push([s.text.trim(),"",""]);});}catch(e){}
+  }
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  return pool.slice(0,n);
+}
+let copyPoolCache=null;
+function copyBuildPool(){
+  const src=$("copySource").value;
+  if(src==="custom")copyPoolCache=state.customLesson?(state.customLesson.listen||[]).map(s=>[s[0],s[1],s[2]]):[];
+  else if(src==="shadow")copyPoolCache=copyShadowPool(20);
+  else{const L=curLesson();copyPoolCache=L?copyLessonPool(L):[];}
+}
+function copyRenderList(){
+  const box=$("copyList");
+  $("copyReroll").style.display=$("copySource").value==="shadow"?"":"none";
+  if(!copyPoolCache||!copyPoolCache.length){box.innerHTML="<div class='small'>沒有句子可用（自訂教材要先貼過內容；跟讀要先分析過至少一段）。</div>";return;}
+  const hideKana=$("copyHideKana").checked,hideCn=$("copyHideCn").checked;
+  box.innerHTML=copyPoolCache.map((s,i)=>{
+    const [jp,kana,cn]=s;
+    return"<div style='margin-top:10px;padding-bottom:8px;border-bottom:1px solid var(--line);'>"+
+      "<div style='display:flex;align-items:center;gap:8px;'><button class='copyPlayBtn' data-i='"+i+"'>🔊</button><span style='font-size:1.15em;'>"+teacherEsc(jp)+"</span></div>"+
+      (hideKana||!kana?"":"<div class='small' style='margin-top:2px;'>"+teacherEsc(kana)+"</div>")+
+      (hideCn||!cn?"":"<div class='small' style='color:var(--sub);margin-top:2px;'>"+teacherEsc(cn)+"</div>")+
+      "</div>";
+  }).join("");
+  box.querySelectorAll(".copyPlayBtn").forEach(btn=>btn.onclick=()=>say(copyPoolCache[parseInt(btn.dataset.i)][0]));
+}
+function copyRender(){copyBuildPool();copyRenderList();}
+$("copySource").onchange=copyRender;
+$("copyReroll").onclick=copyRender;
+$("copyHideKana").onchange=copyRenderList;
+$("copyHideCn").onchange=copyRenderList;
 function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
   $("shadowCard").style.display=m==="shadow"?"":"none";
   $("roleplayCard").style.display=m==="roleplay"?"":"none";
+  $("copyCard").style.display=m==="copy"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
+  if(m==="copy")copyRender();
   if(m!=="shadow")shadowPauseAll();
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"){
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -2169,9 +2262,9 @@ function shadowLoadTrack(){
   const t=list[parseInt($("shadowTrackSel").value||0)];
   if(shadowUrl)URL.revokeObjectURL(shadowUrl);
   if(shadowMyUrl){URL.revokeObjectURL(shadowMyUrl);shadowMyUrl=null;}
-  $("shadowPlayMine").disabled=true;$("shadowAB").disabled=true;
+  $("shadowPlayMine").disabled=true;$("shadowAB").disabled=true;$("shadowDuet").disabled=true;
   shadowSegments=[];shadowSegIdx=-1;$("shadowSliceList").innerHTML="";setStatus("shadowSliceStatus","");$("shadowPrevSeg").disabled=$("shadowNextSeg").disabled=true;
-  $("shadowPitchCanvas").style.display="none";$("shadowPitchInfo").textContent="";renderMoraRow("shadowMoraRow",null);$("shadowReplaySeg").style.display="none";shadowSeg=null;
+  $("shadowPitchCanvas").style.display="none";$("shadowPitchInfo").textContent="";$("shadowContentInfo").textContent="";renderMoraRow("shadowMoraRow",null);$("shadowReplaySeg").style.display="none";shadowSeg=null;
   if(!t){shadowCurLesson=null;shadowCurSection=null;$("shadowAudio").removeAttribute("src");$("shadowText").value="";shadowSetEnabled(false);return;}
   shadowCurLesson=n;shadowCurSection=t.section;
   shadowUrl=URL.createObjectURL(t.file);
@@ -2235,10 +2328,26 @@ function shadowStepSeg(delta){
   if(!shadowSegments.length)return;
   shadowSelectSeg(Math.max(0,Math.min(shadowSegments.length-1,shadowSegIdx+delta)));
 }
+let shadowDuet=null;
+function shadowStopDuet(){
+  if(shadowDuet){shadowDuet.ref.pause();shadowDuet.mine.pause();shadowDuet=null;}
+}
+function shadowPlayDuet(){
+  if(!shadowMyUrl){setStatus("shadowStatus","請先錄音。");return;}
+  shadowPauseAll();
+  const ref=new Audio(shadowUrl),mine=new Audio(shadowMyUrl);
+  ref.currentTime=shadowA;
+  ref.ontimeupdate=()=>{if(shadowB!=null&&ref.currentTime>=shadowB)ref.pause();};
+  shadowDuet={ref,mine};
+  ref.play().catch(()=>{});
+  mine.play().catch(()=>{});
+  setStatus("shadowStatus","🎧 同時播放中：原音檔跟你的錄音疊在一起放，比較節奏跟腔調對不對得上。");
+}
 function shadowPauseAll(){
   const a=$("shadowAudio");if(a)a.pause();
   if(shadowRecording&&shadowMediaRec)shadowMediaRec.stop();
   stopAudio();
+  shadowStopDuet();
 }
 async function shadowToggleRec(){
   if(shadowRecording){shadowMediaRec.stop();$("shadowAudio").pause();return;}
@@ -2251,7 +2360,7 @@ async function shadowToggleRec(){
       stream.getTracks().forEach(t=>t.stop());
       if(shadowMyUrl)URL.revokeObjectURL(shadowMyUrl);
       shadowMyUrl=URL.createObjectURL(new Blob(shadowRecChunks,{type:"audio/webm"}));
-      $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;shadowUpdateAnalyzeEnabled();
+      $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;$("shadowDuet").disabled=false;shadowUpdateAnalyzeEnabled();
       shadowRecording=false;$("shadowRecBtn").innerHTML="🎙 跟讀（播放＋錄音）";
       setStatus("shadowStatus","錄好了，按「聽自己」回放，或「連續對比」交叉聽。");
     };
@@ -2303,6 +2412,7 @@ async function shadowAnalyze(){
       setStatus("shadowStatus","偵測不到足夠的音高（段落太短或太小聲），換一段或錄大聲一點再試。");
       $("shadowPitchCanvas").style.display="none";renderMoraRow("shadowMoraRow",null);
       $("shadowPitchInfo").textContent="";$("shadowReplaySeg").style.display="none";shadowSeg=null;
+      await shadowContentCheck($("shadowText").value.trim());
       return;
     }
     const text=$("shadowText").value.trim();
@@ -2311,7 +2421,7 @@ async function shadowAnalyze(){
     renderMoraRow("shadowMoraRow",moras?await vvScore(text,B,moras):null);
     const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
     const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
-    const hints=fbHints(A.pts,B.pts);
+    const hints=fbHints(A.pts,B.pts,text);
     $("shadowPitchInfo").textContent="🎯 腔調曲線相似度 "+sim+"%　⏱ 語速差 "+(durDiff>0?"+":"")+durDiff+"%"+(hints.length?"　💡 "+hints.join("、"):"");
     shadowSeg=null;$("shadowReplaySeg").style.display="none";
     const wv=worstWindow(A.pts,B.pts);
@@ -2322,8 +2432,20 @@ async function shadowAnalyze(){
       shadowSeg={t:shadowA+A.t0+A.dur*wv.i0/(wv.n-1),d:A.dur*(wv.i1-wv.i0)/(wv.n-1)};
       $("shadowReplaySeg").style.display="";
     }
+    await shadowContentCheck(text);
     setStatus("shadowStatus","分析完成：紅線＝原音檔、藍線＝你。");
   }catch(e){setStatus("shadowStatus","分析失敗："+e.message);}
+}
+/* 內容對不對（STT辨識比對課本文字），跟腔調講評分開顯示，沒填 STT URL 或沒貼課本文字就靜默略過 */
+async function shadowContentCheck(text){
+  $("shadowContentInfo").textContent="";
+  if(!$("sttUrl").value.trim()||!text||!shadowRecChunks.length)return;
+  try{
+    $("shadowContentInfo").textContent="🗣 內容辨識中…";
+    const heard=await sttTranscribe(new Blob(shadowRecChunks,{type:"audio/webm"}));
+    const sim=Math.round(fbSim(text,heard)*100);
+    $("shadowContentInfo").textContent="🗣 內容比對 "+sim+"%"+(sim>=80?"（講對了）":"（辨識到："+heard+"）");
+  }catch(e){$("shadowContentInfo").textContent="";}
 }
 function shadowReplaySeg(){
   const g=shadowSeg;if(!g)return;
@@ -2378,6 +2500,7 @@ $("shadowAudio").addEventListener("timeupdate",()=>{
 $("shadowRecBtn").onclick=shadowToggleRec;
 $("shadowPlayMine").onclick=shadowPlayMine;
 $("shadowAB").onclick=shadowPlayAB;
+$("shadowDuet").onclick=shadowPlayDuet;
 $("shadowAnalyzeBtn").onclick=shadowAnalyze;
 $("shadowReplaySeg").onclick=shadowReplaySeg;
 $("shadowDone").onclick=()=>{markPractice();setStatus("shadowStatus","已記錄今日練習！繼續跟讀或換下一段。");};
