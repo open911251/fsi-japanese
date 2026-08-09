@@ -35,6 +35,7 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 - **回合評分**：`roundVerdict()`／`scoreSave()`／`scoreBadge()`／`finishRound()`（localStorage 鍵 `fsi_score`）。回饋開啟的 sub/qa 回合結束結算，`fbCheck` 會把遲到的辨識結果補進去（`roundDone` 旗標）。課程選單徽章由 `fillLessons()` 讀 `scoreBadge()`。
 - **操練中腔調圖**：`fbPitch()` 在留白錄音後沿用⑤的音高管線畫到 `fbCanvas`（`drawPitch` 第三參數選擇畫布）；listen 跟讀也錄（`fbRecord()` 是共用的留白錄音器）。`worstWindow()` 找差異最大區段標紅＋`fbReplaySeg()` 半速切片重播；`fbHints()` 產生文字修正建議。即時跟唱：`liveStart()`（AnalyserNode 每 45ms 跑 `pitchOfFrame()` 自相關）在留白期間把使用者音高即時疊畫在示範軌道上（`liveDraw()`），示範 contour 由 `liveModel()` 快取；`fbRecord()` 第三參數傳句子文字即啟用。
 - **聽辨訓練**：`MINPAIRS` 資料＋`mpAsk()/mpAnswer()`（⑥分頁，成績鍵 `fsi_minpair`）。四類對立：重音（acc 含 `↘`/`‾`）、長短音、促音、清濁（acc 含類別詞如「長音」「促音」「濁音」）。新增對立組時句 i 必須包含選項 i 的字、兩句載體須相同（只差目標詞），tests/test-minpair.js 會驗標記。抽題走 `mpPick()`：依 `mpHist.g`（每組答錯率）加權，錯得多的組優先出現。同分頁另有「重音位置」子分頁（`ap*` 函式群，成績鍵 `fsi_accentpos`，`ACCENT_WORDS` 詞庫），需 VOICEVOX，見下。
+- **綜合測驗（⑨分頁，Roadmap #20）**：跨課隨機抽考已練過的 `sub` 句型代換題，範圍是獨立於「目前學到第幾課」的解鎖窗口（`examWin`，localStorage `fsi_examwin`）——初始解鎖前 `EXAM_INIT`（2）課，窗口內**每一課各自**（非平均，避免表現好的課蓋掉表現差的課）正確率達 `EXAM_THRESH`（75%）且樣本數 ≥`EXAM_MINN`（4，防單次僥倖）才解鎖下一課（`examMaybeUnlock()`）。格子顏色（`examMastery`，localStorage `fsi_exammastery`）比照 `scores[].best` 只升不降——答對才升階、答錯不退階；已解鎖範圍答錯不影響顏色，但比照 `mpPick()` 的加權邏輯（`examWeight`，localStorage `fsi_examweight`）暗中提高該句型之後被抽到的機率，兩條線互不干擾。格子牆（`examRenderAll()`）一開始就畫出全部28課／目前41個句型的全貌，未解鎖顯示灰格。`examAsk()` 沿用 `sttTranscribe`/`fbSim` 判定對錯（需先填 STT URL），不經過 `runFrom`/`items()` 主狀態機（跟⑥聽辨一樣是獨立自成一體的分頁）。內部除錯 log（`examLog`，localStorage `fsi_examlog`，FIFO上限500筆）記錄逐次事件含判定原始訊號（相似度、當時門檻、STT辨識文字），**不對使用者顯示**，供事後核對評分邏輯用。⑥聽辨頁同批加了 `mpWallRender()` 卡片牆（依 `mpHist.g` 答對率上色，跟綜合測驗共用同一套 `.mastery0-3` CSS 色階）。**已知限制**：第9-28課 `sub` 句型缺口（每課僅1句型4代換詞，見「擴充教材的標準流程」段落的進度）未補，這些課的格子牆目前會很稀疏；此為已知前置依賴，非本次遺漏。
 - **VOICEVOX 音高分析（選用）**：設定卡 `vvUrl`/`vvSpeaker`（localStorage `fsi_vv_url`/`fsi_vv_speaker`）。`vvQuery()` 呼叫 `/audio_query` 取得整句逐拍（mora）結構，`vvMoras()` 展平成 `{kana,voiced,hilo,t0,t1}` 陣列——高低不查教科書規則表，改用「該 accent phrase 內有聲拍音高是否高於該 phrase 平均」（引擎實際輸出常有「尖峰延遲」，比規則表更貼近使用者聽到的示範，見 tests/test-voicevox.js 的真實 fixture）。`moraScore()` 拿使用者 `contour()` 的 48 點序列依 t0/t1 逐拍取平均比對，標記吻合／不吻合，`renderMoraRow()` 畫成一排色塊；`drawMoraTrack()` 在 `drawPitch()`/`liveDraw()` 的畫布疊金色理論高低階梯。三處掛點：`fbPitch()`（操練中回饋）、`analyzePitch()`（⑤錄音對比）、`liveModel()`/`liveStart()`（卡拉OK跟唱）。`vvSynthesize()` 可把改寫過 `accent_phrases[i].accent` 的 JSON 重新合成，供⑥「重音位置」子分頁出題（任一詞查真實重音、複製 JSON 改成另一個重音位置當錯誤選項，不需人工找同音詞對）。VOICEVOX engine 需以 `--cors_policy_mode all` 啟動才允許瀏覽器跨源呼叫；示範播放仍走 Google TTS，VOICEVOX 只當分析器。
 - **今日條**：`todayRender()`／`markPractice()`（streak）／`srsDueAll()`／`lastPracticed()`／`tdPanel()`（漸進揭露）。localStorage 鍵 `fsi_daily`（跨日歸零）與 `fsi_streak`。`finishRound()` 呼叫 `markPractice()`。
 - **間隔複習**：`srs*()` 函式群（Leitner 五盒，localStorage 鍵 `fsi_srs`，每句鍵＝`mode|lesson|id`）。`runFrom(0)` 時 `srsBuildReview()` 把到期句插到 `state.review`（items() 會 concat 在最前）；升降盒由 `fbCheck`（回饋開啟）或 `runFrom` 迴圈（關閉）呼叫 `srsMark()`。句子識別用物件參照 `indexOf`（`srsIdOf`），所以隨機順序下也正確。
@@ -50,7 +51,8 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 
 - `listen`：每項 3 欄 `[日文, かな, 中文]`
 - `sub`：每個練習為 `{p, base, cues}`；`base` 3 欄，`cues` 每項 4 欄 `[提示詞, 日文, かな, 中文]`
-- `qa`：每項 5 欄 `[問題, 問題かな, 答案, 答案かな, 中文]`
+- `qa`：每項 5 欄 `[問題, 問題かな, 答案, 答案かな, 中文]`；**選填的配圖變體格式**（Roadmap #21）：`{q, qk, variants:[{img, a, ak, cn}, ...]}`——`q`/`qk` 是題目（不隨變體變），`variants` 至少要放兩個對立版本（例如日文書封面／英文書封面各一版），播放時 `qaResolveItem()` 隨機選一個變體決定要顯示的圖跟正確答案，圖片路徑用 repo 內相對路徑（`images/qa/...`，圖片素材另外存檔案不內嵌 base64，見下）。**這個變體格式只能用在答案沒有邏輯/文法規則可推導、需要配圖才有確定答案的題目**（例如「這是日文書嗎」），不要用在敬語應對/確認請求這類答案本來就由文法規則決定的題目（純文字5欄格式繼續用，不用配圖）。yes/no類問題**一定要生對立變體**（is/isn't 兩種都要），不能只做單一固定劇本版本，否則使用者可以不看圖背答案矇混過關——這是實測後才發現的坑，仔細記錄在 [[fsi-tool-qa-image-pipeline]]
+- **圖片素材**：另存 repo 內 `images/` 資料夾、用相對路徑引用（不用 base64 內嵌進 HTML）——這是唯一在圖片數量規模（估計上百張）下可行的做法，`<img src="images/...">` 不需要建置流程、不依賴外部CDN，跟「不拆分檔案」規則真正想擋的東西（拆分程式邏輯/依賴建置工具鏈）不是同一件事
 - `build`：`{full, parts}`；`full` 3 欄，`parts` 為由短到長的字串陣列
 - `trans`（選填，轉換操練用）：格式跟 `qa` 相同，每項 5 欄 `[指示句, 指示かな, 答案, 答案かな, 中文]`，指示句要是完整可唸的日文句子（例如「「わたしは学生です」を否定形にしてください。」），不要只寫「→否定形」這種符號，TTS 會照著唸
 - **改完教材必須用 node 驗證欄位數和 JS 語法**，欄位數錯了播放流程會壞掉
@@ -63,7 +65,7 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 4. 依審查結果修正後才寫入 `LESSONS`，跑 `node tests/validate-lessons.js` 與 `node tests/test-shuffle.js` 確認格式與語法沒壞。
 5. 一次只做小批（2-8課或1-2課）試點，不要一口氣做完全部28課。
 
-**目前進度**（2026-08-05）：`sub` 句型缺口第3-8課已補完（commit `552ce3d`），**第9-28課還沒做**；`trans` 轉換操練只有第1課試點（commit `51f123d`），**第2-28課還沒做**。之後繼續擴充時直接照上面五步走，不用重新討論方法。
+**目前進度**（2026-08-09 更新）：`sub` 句型缺口第3-8課已補完（commit `552ce3d`），**第9-13課已補完**（第9課補上手/わかります/から共3個新句型，第10-13課各補2個新句型，全教材句型數41→52、代換詞226個，獨立agent審查過文法範圍/假名/語感/撞句皆無問題），**第14-28課還沒做**；`trans` 轉換操練只有第1課試點（commit `51f123d`），**第2-28課還沒做**。之後繼續擴充時直接照上面五步走，維持小批（本次批次是5課）不要一次衝完全部剩餘課次。
 
 ## 規則
 

@@ -20,7 +20,15 @@ LESSONS.forEach((L, i) => {
     sx.cues.forEach((c, k) => { if (!Array.isArray(c) || c.length !== 4) bad(i, `sub[${j}].cues[${k}] 欄位數 ${c.length}≠4`); });
   });
   if (!Array.isArray(L.qa)) bad(i, "qa 缺失");
-  else L.qa.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `qa[${j}] 欄位數 ${x.length}≠5`); });
+  else L.qa.forEach((x, j) => {
+    if (Array.isArray(x)) { if (x.length !== 5) bad(i, `qa[${j}] 欄位數 ${x.length}≠5`); }
+    else if (x && Array.isArray(x.variants)) {
+      // 配圖題新格式（Roadmap #21）：{q,qk,variants:[{img,a,ak,cn},...]}，隨機選一個變體出題
+      if (typeof x.q !== "string" || typeof x.qk !== "string") bad(i, `qa[${j}] 缺 q/qk`);
+      if (!x.variants.length) bad(i, `qa[${j}].variants 不能是空陣列`);
+      x.variants.forEach((v, k) => { if (!v || typeof v.img !== "string" || typeof v.a !== "string" || typeof v.ak !== "string" || typeof v.cn !== "string") bad(i, `qa[${j}].variants[${k}] 欄位缺失（需 img/a/ak/cn）`); });
+    } else bad(i, `qa[${j}] 格式不對（非5欄陣列，也非 {q,qk,variants} 物件）`);
+  });
   if (L.trans) L.trans.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `trans[${j}] 欄位數 ${x.length}≠5`); });
   if (!L.build || !Array.isArray(L.build.full) || L.build.full.length !== 3) bad(i, "build.full 欄位數 ≠3");
   else if (!Array.isArray(L.build.parts) || L.build.parts.some(p => typeof p !== "string")) bad(i, "build.parts 非字串陣列");

@@ -37,7 +37,7 @@ check(hit0 / 2000 > 2 / MINPAIRS.length, "全錯的組抽中率超過均勻兩�
 check(mkPick(MINPAIRS, { g: {} })() != null, "無歷史紀錄時也能抽題");
 
 // fbHints：曲線差異 → 文字修正建議
-const hintsBlk = script.slice(script.indexOf("function fbHints"), script.indexOf("let fbSeg"));
+const hintsBlk = script.slice(script.indexOf("function endsAsQuestion"), script.indexOf("let fbSeg"));
 const slopeBlk = script.slice(script.indexOf("function segSlope"), script.indexOf("function corrOf"));
 const { fbHints } = new Function(slopeBlk + hintsBlk + "; return {fbHints};")();
 
@@ -47,7 +47,8 @@ check(fbHints(flat, flat.map(() => 3))[0].includes("壓低"), "整體偏高 → 
 const fall = flat.map((_, i) => i > 33 ? -(i - 33) * 0.5 : 0); // 示範句尾下降
 check(fbHints(fall, flat).some(h => h.includes("句尾要降")), "示範句尾下降、使用者持平 → 提醒降下來");
 const rise = flat.map((_, i) => i > 33 ? (i - 33) * 0.5 : 0); // 示範句尾上揚（疑問）
-check(fbHints(rise, flat).some(h => h.includes("句尾要揚")), "示範句尾上揚、使用者持平 → 提醒揚上去");
+check(fbHints(rise, flat, "元気ですか。").some(h => h.includes("句尾要揚")), "示範句尾上揚（疑問句）、使用者持平 → 提醒揚上去");
+check(fbHints(rise, flat, "元気です。").some(h => h.includes("方向相反")), "示範句尾上揚（非疑問句）、使用者持平 → 提醒方向相反而非套疑問語調");
 
 console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
 process.exit(fails ? 1 : 0);

@@ -38,6 +38,25 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 .rec-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#d00;animation:blink 1s infinite;}
 @keyframes blink{50%{opacity:.2;}}
 .wktable{border-collapse:collapse;font-size:.82rem;white-space:nowrap;}
+.mastery0{background:#efe2dc;}
+.mastery1{background:#e3aa95;}
+.mastery2{background:#d4744f;}
+.mastery3{background:#c04a2b;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);}
+.masteryLocked{background:#eae7df;border:1px dashed #b8b2a4;}
+.examLegend{display:flex;flex-wrap:wrap;gap:12px 18px;font-size:.78rem;color:var(--sub);margin-top:8px;}
+.examLegend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px;}
+.examStats{font-size:.82rem;color:var(--sub);margin-top:6px;font-variant-numeric:tabular-nums;}
+.examWall{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;}
+.examCluster{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:#fbfaf7;}
+.examCluster.locked{background:transparent;border-style:dashed;}
+.examClHead{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:7px;}
+.examClNo{font-size:.68rem;color:var(--sub);font-variant-numeric:tabular-nums;}
+.examClTitle{font-size:.74rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+.examCluster.locked .examClTitle{color:#b8b2a4;}
+.examDots{display:flex;flex-wrap:wrap;gap:5px;}
+.examDot{width:16px;height:16px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.06);}
+.mpWall{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.mpCard{width:32px;height:32px;border-radius:6px;flex:none;}
 .wktable td,.wktable th{border:1px solid var(--line);padding:4px 8px;text-align:left;}
 .wktable tr.wkNow{background:#fdf3ef;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -197,6 +216,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="minpair">⑥ 聽辨</button>
     <button data-mode="shadow">⑦ 影子跟讀</button>
     <button data-mode="roleplay">⑧ 角色扮演</button>
+    <button data-mode="exam">⑨ 綜合測驗</button>
     <button data-mode="copy">📝 抄寫</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
@@ -206,6 +226,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="progress" id="prog"></div>
   <div class="bar"><div id="barFill"></div></div>
   <div id="stage">
+    <img id="qaImg" style="display:none;max-width:220px;max-height:220px;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;">
     <div class="jp" id="jpText">請按「開始」</div>
     <div class="kana" id="kanaText"></div>
     <div class="cn" id="cnText"></div>
@@ -217,6 +238,8 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button id="btnPrev">⏮ 上一句</button>
     <button id="btnNext">⏭ 下一句</button>
     <button id="btnReplay">🔁 重播</button>
+    <button id="btnRetryCue">🔁 重來</button>
+    <button id="btnContCue">➡ 繼續</button>
   </div>
   <div class="status" id="drillStatus"></div>
   <div id="fbArea" class="small" style="margin-top:6px;line-height:1.8;"></div>
@@ -271,6 +294,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <div id="mpResult" style="margin-top:10px;line-height:1.9;"></div>
   <div class="small" id="mpScore" style="margin-top:6px;"></div>
+  <div class="mpWall" id="mpWall" title="每格＝一組對立詞，顏色深淺＝該組正確率"></div>
   <div class="small" style="margin-top:8px;">重音標註為標準東京腔（↘＝音高下降處、‾＝平板不降）。語音由 TTS 合成，個別詞若與標註不符請回報。想大量刷題（含動詞、助詞接續）可用 kotu.io。</div>
   </div>
   <div id="apPane" style="display:none;">
@@ -356,6 +380,30 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="small" style="margin-top:8px;">第一版：固定情境、純文字、不存對話紀錄。每輪用提示詞的關鍵字比對對錯，AI 問句由 LLM 現場生成、生成後會先檢查沒有直接洩漏答案再顯示。</div>
 </div>
 
+<div class="card" id="examCard" style="display:none;">
+  <b>綜合測驗</b>　<span class="small">跨課隨機抽考已練過的句型，範圍隨你的表現自動往後推（需先在「本地 AI 設定」填 STT URL）</span>
+  <div class="examLegend">
+    <div><span class="sw masteryLocked"></span>未解鎖</div>
+    <div><span class="sw mastery0"></span>剛解鎖</div>
+    <div><span class="sw mastery1"></span>漸熟</div>
+    <div><span class="sw mastery2"></span>接近穩定</div>
+    <div><span class="sw mastery3"></span>已精熟</div>
+  </div>
+  <div class="examStats" id="examStats"></div>
+  <div class="examWall" id="examWall"></div>
+</div>
+<div class="card" id="examQuizCard" style="display:none;">
+  <div class="row" style="justify-content:space-between;">
+    <button class="primary" id="examPlay">🔊 出題</button>
+    <span class="pill" id="examTypeLabel" style="display:none;"></span>
+  </div>
+  <div class="cue-box" id="examCueBox" style="display:none;">
+    <div id="examCue" style="font-weight:600;"></div>
+  </div>
+  <div id="examResult" style="margin-top:10px;line-height:1.9;"></div>
+  <div class="status" id="examStatus"></div>
+</div>
+
 <div class="card" id="copyCard" style="display:none;">
   <b>抄寫清單</b>　<span class="small">照著清單邊聽邊抄在紙上，寫的動作留在紙上，這裡只負責出題跟播音</span>
   <div class="row" style="margin-top:10px;">
@@ -415,7 +463,9 @@ sub:[{p:"わたしは ＿＿ です。",base:["わたしは学生です。","わ
 ["記者","田中さんは記者じゃありません。","たなかさんは きしゃじゃありません。","田中先生不是記者。"]]}],
 qa:[
 ["お名前は？","おなまえは？","陳です。どうぞよろしく。","ちんです。どうぞよろしく。","您貴姓？→ 我姓陳，請多指教。"],
-["陳さんは学生ですか。","ちんさんは がくせいですか。","はい、学生です。","はい、がくせいです。","陳先生是學生嗎？→ 是的。"],
+{q:"陳さんは学生ですか。",qk:"ちんさんは がくせいですか。",variants:[
+  {img:"images/qa/l1_chin_student.png",a:"はい、学生です。",ak:"はい、がくせいです。",cn:"陳先生是學生嗎？→ 是的。"},
+  {img:"images/qa/l1_chin_employee.png",a:"いいえ、学生じゃありません。会社員です。",ak:"いいえ、がくせいじゃありません。かいしゃいんです。",cn:"陳先生是學生嗎？→ 不是，是上班族。"}]},
 ["田中さんは先生ですか。","たなかさんは せんせいですか。","いいえ、先生じゃありません。会社員です。","いいえ、せんせいじゃありません。かいしゃいんです。","田中是老師嗎？→ 不，是公司職員。"],
 ["あの人はだれですか。","あのひとは だれですか。","あの人は山田さんです。","あのひとは やまださんです。","那個人是誰？→ 是山田先生。"]],
 build:{full:["田中さんは日本の会社の会社員です。","たなかさんは にほんのかいしゃの かいしゃいんです。","田中先生是日本公司的職員。"],parts:["会社員です。","会社の会社員です。","日本の会社の会社員です。","田中さんは日本の会社の会社員です。"]},
@@ -648,7 +698,22 @@ sub:[{p:"わたしは ＿＿ が好きです。",base:["わたしは音楽が好
 ["映画","わたしは映画が好きです。","わたしは えいがが すきです。","我喜歡電影。"],
 ["旅行","わたしは旅行が好きです。","わたしは りょこうが すきです。","我喜歡旅行。"],
 ["犬","わたしは犬が好きです。","わたしは いぬが すきです。","我喜歡狗。"],
-["日本の歌","わたしは日本の歌が好きです。","わたしは にほんのうたが すきです。","我喜歡日本歌。"]]}],
+["日本の歌","わたしは日本の歌が好きです。","わたしは にほんのうたが すきです。","我喜歡日本歌。"]]},
+{p:"妹は ＿＿ が上手です。",base:["妹は歌が上手です。","いもうとは うたが じょうずです。","妹妹很會唱歌。"],cues:[
+["絵","妹は絵が上手です。","いもうとは えが じょうずです。","妹妹很會畫畫。"],
+["水泳","妹は水泳が上手です。","いもうとは すいえいが じょうずです。","妹妹很會游泳。"],
+["ダンス","妹はダンスが上手です。","いもうとは ダンスが じょうずです。","妹妹很會跳舞。"],
+["ピアノ","妹はピアノが上手です。","いもうとは ピアノが じょうずです。","妹妹很會彈鋼琴。"]]},
+{p:"＿＿ が少しわかります。",base:["英語が少しわかります。","えいごが すこし わかります。","懂一點英文。"],cues:[
+["中国語","中国語が少しわかります。","ちゅうごくごが すこし わかります。","懂一點中文。"],
+["フランス語","フランス語が少しわかります。","フランスごが すこし わかります。","懂一點法文。"],
+["韓国語","韓国語が少しわかります。","かんこくごが すこし わかります。","懂一點韓文。"],
+["ドイツ語","ドイツ語が少しわかります。","ドイツごが すこし わかります。","懂一點德文。"]]},
+{p:"＿＿ ですから、早く帰ります。",base:["忙しいですから、早く帰ります。","いそがしいですから、はやく かえります。","因為很忙，所以早點回家。"],cues:[
+["寒い","寒いですから、早く帰ります。","さむいですから、はやく かえります。","因為很冷，所以早點回家。"],
+["眠い","眠いですから、早く帰ります。","ねむいですから、はやく かえります。","因為想睡覺，所以早點回家。"],
+["暑い","暑いですから、早く帰ります。","あついですから、はやく かえります。","因為很熱，所以早點回家。"],
+["悲しい","悲しいですから、早く帰ります。","かなしいですから、はやく かえります。","因為難過，所以早點回家。"]]}],
 qa:[
 ["どんな音楽が好きですか。","どんな おんがくが すきですか。","日本の歌が好きです。","にほんのうたが すきです。","喜歡什麼音樂？→ 日本歌。"],
 ["日本語がわかりますか。","にほんごが わかりますか。","はい、少しわかります。","はい、すこし わかります。","懂日文嗎？→ 懂一點。"],
@@ -668,7 +733,17 @@ sub:[{p:"机の上に ＿＿ があります。",base:["机の上に本があり
 ["眼鏡","机の上に眼鏡があります。","つくえのうえに めがねが あります。","桌上有眼鏡。"],
 ["財布","机の上に財布があります。","つくえのうえに さいふが あります。","桌上有錢包。"],
 ["鍵","机の上に鍵があります。","つくえのうえに かぎが あります。","桌上有鑰匙。"],
-["写真","机の上に写真があります。","つくえのうえに しゃしんが あります。","桌上有照片。"]]}],
+["写真","机の上に写真があります。","つくえのうえに しゃしんが あります。","桌上有照片。"]]},
+{p:"教室に ＿＿ がいます。",base:["教室に学生がいます。","きょうしつに がくせいが います。","教室裡有學生。"],cues:[
+["先生","教室に先生がいます。","きょうしつに せんせいが います。","教室裡有老師。"],
+["子ども","教室に子どもがいます。","きょうしつに こどもが います。","教室裡有小孩。"],
+["友達","教室に友達がいます。","きょうしつに ともだちが います。","教室裡有朋友。"],
+["外国人","教室に外国人がいます。","きょうしつに がいこくじんが います。","教室裡有外國人。"]]},
+{p:"猫は ＿＿ にいます。",base:["猫はテーブルの上にいます。","ねこは テーブルのうえに います。","貓在桌上。"],cues:[
+["椅子の下","猫は椅子の下にいます。","ねこは いすのしたに います。","貓在椅子下面。"],
+["箱の中","猫は箱の中にいます。","ねこは はこのなかに います。","貓在箱子裡面。"],
+["ドアの前","猫はドアの前にいます。","ねこは ドアのまえに います。","貓在門前。"],
+["テレビの後ろ","猫はテレビの後ろにいます。","ねこは テレビのうしろに います。","貓在電視後面。"]]}],
 qa:[
 ["部屋にだれがいますか。","へやに だれが いますか。","だれもいません。","だれも いません。","房間有誰？→ 沒有人。"],
 ["コンビニはどこにありますか。","コンビニは どこに ありますか。","駅の近くにあります。","えきのちかくに あります。","便利商店在哪？→ 車站附近。"],
@@ -688,7 +763,17 @@ sub:[{p:"りんごを ＿＿ ください。",base:["りんごを二つくださ
 ["一つ","りんごを一つください。","りんごを ひとつ ください。","請給我一顆蘋果。"],
 ["三つ","りんごを三つください。","りんごを みっつ ください。","請給我三顆蘋果。"],
 ["五つ","りんごを五つください。","りんごを いつつ ください。","請給我五顆蘋果。"],
-["八つ","りんごを八つください。","りんごを やっつ ください。","請給我八顆蘋果。"]]}],
+["八つ","りんごを八つください。","りんごを やっつ ください。","請給我八顆蘋果。"]]},
+{p:"台湾に ＿＿ います。",base:["台湾に三年います。","たいわんに さんねん います。","要在台灣待三年。"],cues:[
+["二か月","台湾に二か月います。","たいわんに にかげつ います。","要在台灣待兩個月。"],
+["一週間","台湾に一週間います。","たいわんに いっしゅうかん います。","要在台灣待一週。"],
+["十日","台湾に十日います。","たいわんに とおか います。","要在台灣待十天。"],
+["半年","台湾に半年います。","たいわんに はんとし います。","要在台灣待半年。"]]},
+{p:"一週間に ＿＿ 掃除をします。",base:["一週間に三回掃除をします。","いっしゅうかんに さんかい そうじを します。","一週打掃三次。"],cues:[
+["一回","一週間に一回掃除をします。","いっしゅうかんに いっかい そうじを します。","一週打掃一次。"],
+["二回","一週間に二回掃除をします。","いっしゅうかんに にかい そうじを します。","一週打掃兩次。"],
+["四回","一週間に四回掃除をします。","いっしゅうかんに よんかい そうじを します。","一週打掃四次。"],
+["五回","一週間に五回掃除をします。","いっしゅうかんに ごかい そうじを します。","一週打掃五次。"]]}],
 qa:[
 ["ご家族は何人ですか。","ごかぞくは なんにんですか。","五人です。","ごにんです。","家裡幾個人？→ 五個人。"],
 ["ビールは何本ありますか。","ビールは なんぼん ありますか。","三本あります。","さんぼん あります。","啤酒有幾瓶？→ 三瓶。"],
@@ -708,7 +793,17 @@ sub:[{p:"昨日は ＿＿ かったです。（い形容詞變過去）",base:["
 ["暑い","昨日は暑かったです。","きのうは あつかったです。","昨天很熱。"],
 ["寒い","昨日は寒かったです。","きのうは さむかったです。","昨天很冷。"],
 ["忙しい","昨日は忙しかったです。","きのうは いそがしかったです。","昨天很忙。"],
-["おもしろい","昨日はおもしろかったです。","きのうは おもしろかったです。","昨天很有趣。"]]}],
+["おもしろい","昨日はおもしろかったです。","きのうは おもしろかったです。","昨天很有趣。"]]},
+{p:"昨日は ＿＿ でした。",base:["昨日は休みでした。","きのうは やすみでした。","昨天是放假日。"],cues:[
+["晴れ","昨日は晴れでした。","きのうは はれでした。","昨天是晴天。"],
+["パーティー","昨日はパーティーでした。","きのうは パーティーでした。","昨天是派對。"],
+["誕生日","昨日は誕生日でした。","きのうは たんじょうびでした。","昨天是生日。"],
+["テスト","昨日はテストでした。","きのうは テストでした。","昨天是考試。"]]},
+{p:"この店はあの店より ＿＿ です。",base:["この店はあの店より安いです。","このみせは あのみせより やすいです。","這家店比那家店便宜。"],cues:[
+["新しい","この店はあの店より新しいです。","このみせは あのみせより あたらしいです。","這家店比那家店新。"],
+["きれい","この店はあの店よりきれいです。","このみせは あのみせより きれいです。","這家店比那家店漂亮。"],
+["有名","この店はあの店より有名です。","このみせは あのみせより ゆうめいです。","這家店比那家店有名。"],
+["便利","この店はあの店より便利です。","このみせは あのみせより べんりです。","這家店比那家店方便。"]]}],
 qa:[
 ["旅行はどうでしたか。","りょこうは どうでしたか。","とても楽しかったです。","とても たのしかったです。","旅行如何？→ 非常開心。"],
 ["昨日の天気はどうでしたか。","きのうのてんきは どうでしたか。","雨でした。","あめでした。","昨天天氣如何？→ 下雨。"],
@@ -728,7 +823,17 @@ sub:[{p:"ます形 → 〜たいです（變化練習）",base:["食べます �
 ["飲みます","飲みたいです。","のみたいです。","想喝。"],
 ["買います","買いたいです。","かいたいです。","想買。"],
 ["休みます","休みたいです。","やすみたいです。","想休息。"],
-["会います","会いたいです。","あいたいです。","想見面。"]]}],
+["会います","会いたいです。","あいたいです。","想見面。"]]},
+{p:"新しい ＿＿ がほしいです。",base:["新しい靴がほしいです。","あたらしい くつが ほしいです。","想要新鞋子。"],cues:[
+["時計","新しい時計がほしいです。","あたらしい とけいが ほしいです。","想要新手錶。"],
+["カメラ","新しいカメラがほしいです。","あたらしい カメラが ほしいです。","想要新相機。"],
+["自転車","新しい自転車がほしいです。","あたらしい じてんしゃが ほしいです。","想要新腳踏車。"],
+["かばん","新しいかばんがほしいです。","あたらしい かばんが ほしいです。","想要新包包。"]]},
+{p:"＿＿ に行きます。",base:["ご飯を食べに行きます。","ごはんを たべに いきます。","去吃飯。"],cues:[
+["本を買い","本を買いに行きます。","ほんを かいに いきます。","去買書。"],
+["音楽を聞き","音楽を聞きに行きます。","おんがくを ききに いきます。","去聽音樂。"],
+["友達に会い","友達に会いに行きます。","ともだちに あいに いきます。","去見朋友。"],
+["写真を撮り","写真を撮りに行きます。","しゃしんを とりに いきます。","去拍照。"]]}],
 qa:[
 ["今何がいちばんほしいですか。","いま なにが いちばん ほしいですか。","車がほしいです。","くるまが ほしいです。","現在最想要什麼？→ 車。"],
 ["週末何をしたいですか。","しゅうまつ なにを したいですか。","海へ行きたいです。","うみへ いきたいです。","週末想做什麼？→ 想去海邊。"],
@@ -1612,6 +1717,14 @@ function itemsRaw(){
   return[];
 }
 function shuffle(a){const x=a.slice();for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
+/* qa 題目支援兩種格式：舊格式純陣列 [q,qk,a,ak,cn]（無圖，行為不變）；
+   新格式 {q,qk,variants:[{img,a,ak,cn},...]}（配圖題，隨機選一個變體出題，答案跟著變，
+   避免同一題永遠只有一種劇本、被使用者背答案矇混——比照 mpAsk() 的 mp.side 隨機邏輯，Roadmap #21）。 */
+function qaResolveItem(it){
+  if(Array.isArray(it))return{q:it[0],qk:it[1],a:it[2],ak:it[3],cn:it[4],img:null};
+  const v=it.variants[Math.floor(Math.random()*it.variants.length)];
+  return{q:it.q,qk:it.qk,a:v.a,ak:v.ak,cn:v.cn,img:v.img};
+}
 /* 每句型代換題數上限：cue 池變大後，單輪只從池裡隨機抽上限數量，避免每輪太長。
    以 subCapSeed 快取（按輪次重抽，見 runFrom 的 i===0 分支），同一輪播放中固定。 */
 let subCapSeed=1,subCapCache={key:"",map:null};
@@ -1644,6 +1757,11 @@ function items(){
   }
   return state.review.length?state.review.map(r=>r.it).concat(arr):arr;
 }
+function showQaImage(path){
+  const el=$("qaImg");
+  if(path){el.src=path;el.style.display="";}
+  else{el.style.display="none";el.removeAttribute("src");}
+}
 function showText(jp,kana,cn,cue){
   const j=$("jpText"),k=$("kanaText"),c=$("cnText");
   j.textContent=jp||"";k.textContent=kana||"";c.textContent=cn||"";
@@ -1662,6 +1780,13 @@ function updateProg(){
 function modeName(){return{listen:"聽讀：聽 → 大聲跟讀",sub:"代換：聽提示詞 → 說出新句 → 聽解答",qa:"應答：聽問題 → 自己回答 → 聽示範",build:"逐段累加：由句尾往前逐段跟讀",trans:"轉換：聽指示句 → 自己套規則變化 → 聽正解"}[state.mode]||"";}
 
 /* ================= 訓練流程 ================= */
+async function revealCue(i,id,ok){/* 代換題揭曉解答；抽出來讓 cueContinue() 可以單獨呼叫 */
+  const it=items()[i],[cue,ans,ansKana,cn]=it.c;
+  showText(ans,ansKana,cn);
+  setStatus("drillStatus","🔊 解答…");await say(ans);if(!ok())return false;
+  await sleep(gapFor(ans)*0.7,id);
+  return true;
+}
 async function playItem(i,id){
   const arr=items();if(i>=arr.length||i<0)return false;
   state.idx=i;updateProg();
@@ -1688,12 +1813,11 @@ async function playItem(i,id){
       showText("","",i<state.review.length?"句型："+it.s.p:"",cue);/* 複習題沒播過基本句，補句型提示 */
       setStatus("drillStatus","🔊 提示詞…");await say(cue);if(!ok())return false;
       setStatus("drillStatus","🗣 說出完整新句！");await fbGap(gapFor(ans),id,ans,ansKana,srsIdOf(i));if(!ok())return false;
-      showText(ans,ansKana,cn);
-      setStatus("drillStatus","🔊 解答…");await say(ans);if(!ok())return false;
-      await sleep(gapFor(ans)*0.7,id);
+      if(!await revealCue(i,id,ok))return false;
     }
   }else if(state.mode==="qa"||state.mode==="trans"){
-    const[q,qk,a,ak,cn]=arr[i];
+    const{q,qk,a,ak,cn,img}=state.mode==="qa"?qaResolveItem(arr[i]):{q:arr[i][0],qk:arr[i][1],a:arr[i][2],ak:arr[i][3],cn:arr[i][4],img:null};
+    showQaImage(img);
     showText(q,qk,"");
     setStatus("drillStatus",state.mode==="trans"?"🔊 轉換指示…":"🔊 問題…");await say(q);if(!ok())return false;
     setStatus("drillStatus",state.mode==="trans"?"🗣 自己變化看看！":"🗣 自己回答！");await fbGap(gapFor(a)*1.3,id,a,ak,srsIdOf(i));if(!ok())return false;
@@ -1707,6 +1831,30 @@ async function playItem(i,id){
     for(let r=0;r<rep;r++){if(!ok())return false;setStatus("drillStatus","🔊 聽…");await say(it.p);if(!ok())return false;setStatus("drillStatus","🗣 跟讀！");await fbGap(gapFor(it.p),id,it.p,it.last?b.full[1]:"",null);}/* 逐段也計分，但不進 SRS */
   }
   return true;
+}
+async function cueRetry(){/* 只重播提示詞→重錄，停在原地不揭曉答案，供代換題講不好時重練 */
+  const it=items()[state.idx];
+  if(!(state.mode==="sub"&&it&&it.type==="cue")){setStatus("drillStatus","「重來」目前只支援代換題。");return;}
+  stopRun();
+  state.running=true;const id=++state.runId;
+  const ok=()=>state.runId===id&&state.running;
+  const i=state.idx,[cue,ans,ansKana,cn]=it.c;
+  showText("","",i<state.review.length?"句型："+it.s.p:"",cue);
+  setStatus("drillStatus","🔊 提示詞…");await say(cue);if(!ok())return;
+  setStatus("drillStatus","🗣 再說一次！（🔁重來可再練一次，➡繼續聽解答）");
+  await fbGap(gapFor(ans),id,ans,ansKana,srsIdOf(i));if(!ok())return;
+  state.running=false;$("btnStart").textContent="▶ 開始";
+  setStatus("drillStatus","已暫停，🔁「重來」再練一次，或➡「繼續」聽解答並往下。");
+}
+async function cueContinue(){/* 揭曉解答並接續正常流程；非代換題時等同直接繼續播放 */
+  const it=items()[state.idx];
+  if(!(state.mode==="sub"&&it&&it.type==="cue")){runFrom(state.idx);return;}
+  stopRun();
+  state.running=true;const id=++state.runId;
+  const ok=()=>state.runId===id&&state.running;
+  if(!await revealCue(state.idx,id,ok))return;
+  if(!(fbOn()&&state.mode!=="listen"))srsMark(srsIdOf(state.idx),1);
+  runFrom(state.idx+1);
 }
 async function runFrom(i){
   state.running=true;const id=++state.runId;
@@ -1952,19 +2100,23 @@ $("copyHideCn").onchange=copyRenderList;
 function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
+  showQaImage(null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
   $("shadowCard").style.display=m==="shadow"?"":"none";
   $("roleplayCard").style.display=m==="roleplay"?"":"none";
   $("copyCard").style.display=m==="copy"?"":"none";
+  $("examCard").style.display=m==="exam"?"":"none";
+  $("examQuizCard").style.display=m==="exam"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
   if(m==="copy")copyRender();
+  if(m==="exam")examRenderAll();
   if(m!=="shadow")shadowPauseAll();
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"){
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"&&m!=="exam"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -1979,6 +2131,8 @@ $("btnPause").onclick=()=>{stopRun();setStatus("drillStatus","已暫停，按「
 $("btnPrev").onclick=()=>{stopRun();state.idx=Math.max(0,state.idx-1);runFrom(state.idx);};
 $("btnNext").onclick=()=>{stopRun();state.idx=Math.min(items().length-1,state.idx+1);runFrom(state.idx);};
 $("btnReplay").onclick=()=>{stopRun();runFrom(state.idx);};
+$("btnRetryCue").onclick=()=>cueRetry();
+$("btnContCue").onclick=()=>cueContinue();
 $("jpText").onclick=()=>{$("jpText").classList.remove("hidden-text");};
 $("rate").oninput=e=>{$("rateVal").textContent=e.target.value;audioCache.clear();};
 $("voiceSel").onchange=()=>{audioCache.clear();store.set("fsi_voice",$("voiceSel").value);};
@@ -1995,6 +2149,7 @@ $("mpPlay").onclick=mpAsk;
 $("mpAgain").onclick=()=>{if(mp.cur)say(mp.cur.s[mp.side]);};
 $("mpOptA").onclick=()=>mpAnswer(0);
 $("mpOptB").onclick=()=>mpAnswer(1);
+$("examPlay").onclick=examAsk;
 $("apPlay").onclick=apAsk;
 $("apOptA").onclick=()=>apAnswer(0);
 $("apOptB").onclick=()=>apAnswer(1);
@@ -2191,7 +2346,7 @@ function mpPick(){/* 加權抽題：答錯率高的組優先，沒練過的組�
 }
 let mp={cur:null,side:0,n:0,ok:0,answered:true};
 let mpHist={n:0,ok:0};try{mpHist=JSON.parse(store.get("fsi_minpair",'{"n":0,"ok":0}'))||mpHist;}catch(e){}
-function mpScoreShow(){$("mpScore").textContent="本次 "+mp.ok+"/"+mp.n+(mpHist.n?("　·　歷史正確率 "+Math.round(mpHist.ok/mpHist.n*100)+"%（共 "+mpHist.n+" 題）"):"");}
+function mpScoreShow(){$("mpScore").textContent="本次 "+mp.ok+"/"+mp.n+(mpHist.n?("　·　歷史正確率 "+Math.round(mpHist.ok/mpHist.n*100)+"%（共 "+mpHist.n+" 題）"):"");mpWallRender();}
 async function mpAsk(){
   mp.cur=mpPick();
   mp.side=Math.random()<0.5?0:1;mp.answered=false;
@@ -2260,6 +2415,230 @@ function apAnswer(i){
   apScoreShow();
   const wrongDesc=c.wrong===0?"整句不下降":"下降改在第"+c.wrong+"拍";
   $("apResult").textContent=(hit?"✅ 正確！":"❌ 不對。")+"標準唸法是 "+(c.correctSide===0?"A":"B")+"——「"+c.word+"」是"+apWordLabel(c.n,c.correct)+"；另一個是"+wrongDesc+"的合成錯誤示範，僅供對比。";
+}
+function mpWallRender(){/* Roadmap #20 項A：MINPAIRS 每組正確率上色，答對率越高越深 */
+  const wall=$("mpWall");if(!wall)return;
+  wall.innerHTML="";
+  MINPAIRS.forEach(p=>{
+    const st=(mpHist.g||{})[mpKey(p)];
+    const ratio=st&&st.n?st.ok/st.n:null;
+    const lv=ratio==null?0:Math.min(3,Math.floor(ratio*4));
+    const div=document.createElement("div");
+    div.className="mpCard "+(ratio==null?"mastery0":"mastery"+lv);
+    div.title=p.o[0].jp+" / "+p.o[1].jp+(st?"（"+st.ok+"/"+st.n+"）":"（尚未練習）");
+    wall.appendChild(div);
+  });
+}
+
+/* ================= 綜合測驗（Roadmap #20）=================
+   跨課隨機抽考已練過的 sub/trans 題目（皆按課次組織；build 結構是單一漸進階梯不是題目陣列、
+   聽辨MINPAIRS是猜測型2AFC任務，兩者皆刻意不放進題庫，理由見下方「解鎖判定」段落。
+   qa 也刻意不放進題庫：qa 的答案是編出來的劇本事實（例如「這本書是英文書」），沒有圖片/前提脈絡
+   使用者根本無從推理，日常③應答練習沒問題（聽完會播正解句讓你跟讀，不要求答對），但測驗要求
+   「答對才算過」，這個假設在這種題目上不成立——2026-08-09 使用者實測直接踩到才發現），
+   範圍是獨立於目前學習進度的「解鎖窗口」：初始解鎖前 EXAM_INIT 課，窗口內每一課各自（非平均）
+   正確率達 EXAM_THRESH 才解鎖下一課，避免用平均蓋掉某一課真正不熟的漏洞。
+   格子顏色（只有 sub 題目會點亮，qa/trans 只影響窗口進度不長新格子）只升不降，
+   已解鎖範圍答錯不掉色，只暗中提高該題之後被抽到的機率（比照 mpPick 的加權邏輯）。
+   fsi_examlog 記錄逐次事件（含判定用的原始訊號），供事後核對評分邏輯，不對使用者顯示規則本身。
+
+   解鎖判定用「永久達標旗標」（examWin.a），不是即時比率：語言遺忘是常態，若解鎖判定看的是
+   終身累積比率，已解鎖課次事後表現退步會讓比率跌破門檻，因為判定要求「所有已解鎖課都達標」，
+   會靜默卡死後續所有解鎖、且使用者無從得知原因（規則本就不對外顯示）——這是獨立review抓到的
+   嚴重bug。修法：一旦某課首次達標(n≥EXAM_MINN且ok/n≥EXAM_THRESH)，永久記一個不會被撤銷的旗標；
+   之後若該課退步，不影響已解鎖資格，改把那題丟進既有SRS複習排程（examSrsKeyFor）。
+
+   聽辨(MINPAIRS)刻意不併入這套窗口：語言測驗理論上，二選一的猜測基準是50%，開口作答(STT比對)
+   趨近於0，同樣寫「75%」代表的真實能力差距巨大，混在同一個累積門檻裡，答不出完整句子的人可能
+   靠聽辨的猜測分數拉高比率矇混過關——這正是這個功能想抓的「假性學會」漏洞，混了反而開後門。
+   聽辨維持在⑥頁自己的 mpWallRender() 卡片牆，跟這裡完全獨立。 */
+const EXAM_INIT=2,EXAM_STEP=1,EXAM_THRESH=0.75,EXAM_MINN=4,EXAM_LEVELS=4,EXAM_LOGCAP=500,EXAM_FRESH_DAYS=14;
+function examKey(mode,lesson,idx){return mode+"|"+lesson+"|"+idx;}
+let examWin={u:[0,1],p:{},a:{}};
+try{const j=JSON.parse(store.get("fsi_examwin","null"));if(j&&Array.isArray(j.u))examWin={u:j.u,p:j.p||{},a:j.a||{}};}catch(e){}
+function examWinSave(){store.set("fsi_examwin",JSON.stringify(examWin));}
+let examMastery={};try{examMastery=JSON.parse(store.get("fsi_exammastery","{}"))||examMastery;}catch(e){}
+function examMasterySave(){store.set("fsi_exammastery",JSON.stringify(examMastery));}
+let examWeight={};try{examWeight=JSON.parse(store.get("fsi_examweight","{}"))||examWeight;}catch(e){}
+function examWeightSave(){store.set("fsi_examweight",JSON.stringify(examWeight));}
+let examLog=[];try{examLog=JSON.parse(store.get("fsi_examlog","[]"))||examLog;}catch(e){}
+function examLogPush(ev){examLog.push(ev);if(examLog.length>EXAM_LOGCAP)examLog=examLog.slice(examLog.length-EXAM_LOGCAP);store.set("fsi_examlog",JSON.stringify(examLog));}
+function examPatternCount(lesson){const L=LESSONS[lesson];return L&&L.sub?L.sub.length:0;}
+function examTransCount(lesson){const L=LESSONS[lesson];return L&&L.trans?L.trans.length:0;}
+function examPoolKeys(){/* qa 刻意不放進題庫：qa 的答案是編出來的劇本事實（例如「這本書是英文書」），
+  沒有圖片/前提脈絡的話使用者根本無從推理，日常③應答練習沒問題（聽完會播正解句讓你跟讀，不要求答對），
+  但測驗要求「答對才算過」，這個假設在這種題目上不成立——2026-08-09 使用者實測直接踩到才發現 */
+  const out=[];
+  examWin.u.forEach(li=>{
+    for(let pi=0;pi<examPatternCount(li);pi++)out.push(examKey("sub",li,pi));
+    for(let ti=0;ti<examTransCount(li);ti++)out.push(examKey("trans",li,ti));
+  });
+  return out;
+}
+function examPick(){/* 加權抽題：比照 mpPick，答錯率高的優先，沒練過視為50%錯誤率；
+  久未被抽到的已精熟項目加一點新鮮度回補，避免顏色牆變成只長不驗的歷史紀錄 */
+  const keys=examPoolKeys();if(!keys.length)return null;
+  const now=Date.now();
+  const w=keys.map(k=>{
+    const st=examWeight[k];
+    const wr=st&&st.n?(st.n-st.ok)/st.n:0.5;
+    let weight=1+3*wr;
+    if(st&&st.last&&(now-st.last)>EXAM_FRESH_DAYS*86400000)weight+=0.5;
+    return weight;
+  });
+  let r=Math.random()*w.reduce((a,b)=>a+b,0);
+  for(let i=0;i<w.length;i++){r-=w[i];if(r<0)return keys[i];}
+  return keys[keys.length-1];
+}
+function examResolve(key){
+  const parts=key.split("|");const mode=parts[0],li=parseInt(parts[1]),idx=parseInt(parts[2]);
+  const L=LESSONS[li];if(!L)return null;
+  if(mode==="sub"){
+    const s=L.sub&&L.sub[idx];if(!s)return null;
+    const ci=Math.floor(Math.random()*s.cues.length);
+    return{mode:"sub",lesson:li,patternIdx:idx,cueIdx:ci,key:key,s:s,c:s.cues[ci]};
+  }
+  if(mode==="qa"||mode==="trans"){
+    const it=L[mode]&&L[mode][idx];if(!it)return null;
+    return{mode:mode,lesson:li,itemIdx:idx,key:key,q:it[0],qk:it[1],a:it[2],ak:it[3],cn:it[4]};
+  }
+  return null;
+}
+function examMasteryBump(key,hit){/* 只有sub題目點亮格子牆（顆粒度＝句型）；qa/trans不長新格子，只影響窗口進度。只升不降：答對才進階，答錯不退階 */
+  if(key.indexOf("sub|")!==0)return;
+  const cur=examMastery[key]||0;
+  if(hit)examMastery[key]=Math.min(EXAM_LEVELS-1,cur+1);
+  examMasterySave();
+}
+function examWeightBump(key,hit){/* 已解鎖範圍答錯不影響顏色，暗中提高後續被抽到的機率；順便記時間戳供新鮮度地板用 */
+  const st=examWeight[key]||(examWeight[key]={n:0,ok:0});
+  st.n++;if(hit)st.ok++;st.last=Date.now();
+  examWeightSave();
+}
+function examLessonAchieved(lesson){return!!examWin.a[lesson];}
+function examMaybeUnlock(){/* 用永久達標旗標判定，不是即時比率——已達標的課不會因後續退步被撤銷解鎖資格 */
+  if(!examWin.u.length)return null;
+  const allAchieved=examWin.u.every(li=>examWin.a[li]);
+  if(!allAchieved)return null;
+  const next=Math.max.apply(null,examWin.u)+EXAM_STEP;
+  if(next>=LESSONS.length||examWin.u.indexOf(next)>=0)return null;
+  examWin.u.push(next);examWinSave();
+  return next;
+}
+function examWinBump(lesson,hit){/* 回傳剛解鎖的課號（無則null）。首次達標(n≥EXAM_MINN且比率達標)才寫入永久旗標，之後不會被撤銷 */
+  const st=examWin.p[lesson]||(examWin.p[lesson]={n:0,ok:0});
+  st.n++;if(hit)st.ok++;
+  if(!examWin.a[lesson]&&st.n>=EXAM_MINN&&st.ok/st.n>=EXAM_THRESH)examWin.a[lesson]=true;
+  examWinSave();
+  return examMaybeUnlock();
+}
+let examCur=null;
+function examSrsKeyFor(key,cur){/* 把 exam 的 pool key 換算回既有 srsKey() 格式，讓已達標課退步能接進SRS複習排程 */
+  const parts=key.split("|");const mode=parts[0],li=parseInt(parts[1]),idx=parseInt(parts[2]);
+  if(mode==="qa"||mode==="trans")return srsKey(mode,li,idx);
+  if(mode==="sub"&&cur&&cur.mode==="sub"&&cur.key===key)return srsKey("sub",li,cur.patternIdx+"-"+cur.cueIdx);
+  return null;
+}
+function examStatsText(){
+  const total=examWin.u.reduce((a,li)=>a+examPatternCount(li),0);
+  const mastered=Object.keys(examMastery).filter(k=>examMastery[k]>=EXAM_LEVELS-1).length;
+  const lo=Math.min.apply(null,examWin.u),hi=Math.max.apply(null,examWin.u);
+  return"已解鎖 "+examWin.u.length+" / "+LESSONS.length+" 課　·　精熟 "+mastered+" / "+total+" 句型　·　目前窗口：第"+(lo+1)+"–"+(hi+1)+"課";
+}
+function examRenderAll(){
+  $("examStats").textContent=examStatsText();
+  const wall=$("examWall");wall.innerHTML="";
+  LESSONS.forEach((L,li)=>{
+    const unlocked=examWin.u.indexOf(li)>=0;
+    const n=examPatternCount(li);
+    const div=document.createElement("div");
+    div.className="examCluster"+(unlocked?"":" locked");
+    let dots="";
+    for(let pi=0;pi<n;pi++){
+      if(!unlocked){dots+="<span class='examDot masteryLocked'></span>";continue;}
+      const lv=examMastery[examKey("sub",li,pi)]||0;
+      dots+="<span class='examDot mastery"+lv+"' title='"+teacherEsc(L.sub[pi].p)+"'></span>";
+    }
+    div.innerHTML="<div class='examClHead'><span class='examClNo'>第"+(li+1)+"課</span></div><div class='examClTitle'>"+teacherEsc(L.t.replace(/^第\d+課\s*/,""))+"</div><div class='examDots' style='margin-top:6px;'>"+dots+"</div>";
+    wall.appendChild(div);
+  });
+}
+async function examRecordAndCheck(gapText,expected,expectedKana){/* 共用：留白自動錄音→STT→相似度，錄不到聲音回傳null */
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);}
+  catch(e){$("examStatus").textContent="⚠ 無法使用麥克風："+e.message;return null;}
+  const mr=newRecorder(fbStream);const chunks=[];
+  mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  mr.start();
+  await new Promise(res=>setTimeout(res,gapFor(gapText)));
+  const blob=await new Promise(res=>{mr.onstop=()=>res(new Blob(chunks,{type:mr.mimeType||"audio/webm"}));mr.stop();});
+  if(!blob.size){$("examStatus").textContent="🤔 沒聽到聲音，按「出題」重試。";return null;}
+  $("examStatus").textContent="⏳ 辨識中…";
+  let heard="";
+  try{heard=await sttTranscribe(blob);}catch(e){$("examStatus").textContent="⚠ STT 失敗："+e.message;return null;}
+  const sim=Math.max(fbSim(heard,expected),expectedKana?fbSim(heard,expectedKana):0);
+  const pct=Math.round(sim*100);
+  return{heard:heard,pct:pct,hit:pct>=75};
+}
+function examFinishAnswer(key,lesson,result){/* 共用：答案判定後的狀態更新＋log＋UI，sub/qa/trans都走這裡 */
+  const levelBefore=examMastery[key]||0;
+  examMasteryBump(key,result.hit);
+  const levelAfter=examMastery[key]||0;
+  examWeightBump(key,result.hit);
+  const wasAchieved=examLessonAchieved(lesson);
+  const unlocked=examWinBump(lesson,result.hit);
+  if(!result.hit&&wasAchieved){
+    const srsK=examSrsKeyFor(key,examCur);
+    if(srsK)srsMark(srsK,-1);
+  }
+  const parts=key.split("|");
+  examLogPush({t:Date.now(),mode:parts[0],lesson:lesson,idx:parseInt(parts[2]),
+    raw:{sim:result.pct,threshold:75,sttText:result.heard,expected:result.expected},
+    hit:result.hit,levelBefore:levelBefore,levelAfter:levelAfter,
+    windowChanged:unlocked!=null,unlockedLesson:unlocked});
+  $("examResult").textContent=result.hit?"✅ 正確":("❌ 跟預期答案不同　你說："+result.heard+"　／　預期："+result.expected);
+  $("examStatus").textContent=unlocked!=null?("🔓 解鎖第"+(unlocked+1)+"課！"):"";
+  examRenderAll();
+}
+const EXAM_SESSION_LEN=10;
+let examSessionN=0;
+async function examAsk(){
+  if(examSessionN>=EXAM_SESSION_LEN){examSessionN=0;$("examPlay").textContent="🔊 出題";}
+  if(!$("sttUrl").value.trim()){$("examStatus").textContent="請先在「本地 AI 設定」填 STT URL 才能使用綜合測驗（需要能自動判斷對錯）。";return;}
+  const key=examPick();
+  if(!key){$("examStatus").textContent="目前沒有可測驗的內容。";return;}
+  const r=examResolve(key);if(!r){$("examStatus").textContent="⚠ 找不到題目內容。";return;}
+  examCur=r;
+  $("examPlay").disabled=true;$("examResult").textContent="";$("examStatus").textContent="";
+  $("examCueBox").style.display="";
+  const typeLabel={sub:"② 代換 · 造句",qa:"③ 應答 · 回答問題",trans:"🔁 轉換 · 依指示轉換"}[r.mode];
+  $("examTypeLabel").textContent=typeLabel;$("examTypeLabel").style.display=typeLabel?"":"none";
+  let expected,expectedKana;
+  if(r.mode==="sub"){
+    $("examCue").textContent="（示範）"+r.s.base[0];
+    await say(r.s.base[0]);/* 先播同句型基本句轉換示範，解決提示詞跨句型撞名的歧義問題——用範例示範，不靠語法術語標籤 */
+    await new Promise(res=>setTimeout(res,300));
+    $("examCue").textContent=r.c[0];
+    await say(r.c[0]);
+    expected=r.c[1];expectedKana=r.c[2];
+  }else{
+    $("examCue").textContent=r.q;
+    await say(r.q);
+    expected=r.a;expectedKana=r.ak;
+  }
+  $("examStatus").textContent="🗣 說出來！";
+  const res=await examRecordAndCheck(expected,expected,expectedKana);
+  if(!res){$("examPlay").disabled=false;return;}
+  res.expected=expected;
+  examFinishAnswer(key,r.lesson,res);
+  await say(expected);
+  examSessionN++;
+  if(examSessionN>=EXAM_SESSION_LEN){
+    $("examStatus").textContent=($("examStatus").textContent?$("examStatus").textContent+"　":"")+"✅ 本次測驗完成（"+EXAM_SESSION_LEN+"題）";
+    $("examPlay").textContent="🔄 再測一輪";
+  }else{
+    $("examPlay").textContent="▶ 下一題";
+  }
+  $("examPlay").disabled=false;
 }
 
 /* ================= 影子跟讀（純跟讀，無腔調分析） ================= */
