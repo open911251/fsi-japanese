@@ -398,6 +398,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <span class="pill" id="examTypeLabel" style="display:none;"></span>
   </div>
   <div class="cue-box" id="examCueBox" style="display:none;">
+    <img id="examImg" style="display:none;max-width:220px;max-height:220px;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;">
     <div id="examCue" style="font-weight:600;"></div>
   </div>
   <div id="examResult" style="margin-top:10px;line-height:1.9;"></div>
@@ -1778,6 +1779,11 @@ function showQaImage(path){
   if(path){el.src=path;el.style.display="";}
   else{el.style.display="none";el.removeAttribute("src");}
 }
+function showExamImage(path){
+  const el=$("examImg");
+  if(path){el.src=path;el.style.display="";}
+  else{el.style.display="none";el.removeAttribute("src");}
+}
 function showText(jp,kana,cn,cue){
   const j=$("jpText"),k=$("kanaText"),c=$("cnText");
   j.textContent=jp||"";k.textContent=kana||"";c.textContent=cn||"";
@@ -2116,7 +2122,7 @@ $("copyHideCn").onchange=copyRenderList;
 function switchMode(m){
   stopRun();state.mode=m;state.idx=0;state.review=[];
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
-  showQaImage(null);
+  showQaImage(null);showExamImage(null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
   $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
@@ -2481,13 +2487,16 @@ let examLog=[];try{examLog=JSON.parse(store.get("fsi_examlog","[]"))||examLog;}c
 function examLogPush(ev){examLog.push(ev);if(examLog.length>EXAM_LOGCAP)examLog=examLog.slice(examLog.length-EXAM_LOGCAP);store.set("fsi_examlog",JSON.stringify(examLog));}
 function examPatternCount(lesson){const L=LESSONS[lesson];return L&&L.sub?L.sub.length:0;}
 function examTransCount(lesson){const L=LESSONS[lesson];return L&&L.trans?L.trans.length:0;}
-function examPoolKeys(){/* qa 刻意不放進題庫：qa 的答案是編出來的劇本事實（例如「這本書是英文書」），
-  沒有圖片/前提脈絡的話使用者根本無從推理，日常③應答練習沒問題（聽完會播正解句讓你跟讀，不要求答對），
-  但測驗要求「答對才算過」，這個假設在這種題目上不成立——2026-08-09 使用者實測直接踩到才發現 */
+function examPoolKeys(){/* qa 只收有配圖變體的題目（{q,qk,variants} 物件格式）：純5欄陣列格式的qa答案是編出來的
+  劇本事實（例如「這本書是英文書」），沒有圖片/前提脈絡使用者根本無從推理，日常③應答練習沒問題（聽完會播
+  正解句讓你跟讀，不要求答對），但測驗要求「答對才算過」，這個假設在這種題目上不成立——2026-08-09 使用者
+  實測直接踩到才發現。配圖變體格式的答案由圖片決定，可以公平測驗，所以只有這種格式才放進題庫 */
   const out=[];
   examWin.u.forEach(li=>{
+    const L=LESSONS[li];
     for(let pi=0;pi<examPatternCount(li);pi++)out.push(examKey("sub",li,pi));
     for(let ti=0;ti<examTransCount(li);ti++)out.push(examKey("trans",li,ti));
+    if(L&&L.qa)L.qa.forEach((it,qi)=>{if(!Array.isArray(it))out.push(examKey("qa",li,qi));});
   });
   return out;
 }
@@ -2514,9 +2523,14 @@ function examResolve(key){
     const ci=Math.floor(Math.random()*s.cues.length);
     return{mode:"sub",lesson:li,patternIdx:idx,cueIdx:ci,key:key,s:s,c:s.cues[ci]};
   }
-  if(mode==="qa"||mode==="trans"){
-    const it=L[mode]&&L[mode][idx];if(!it)return null;
-    return{mode:mode,lesson:li,itemIdx:idx,key:key,q:it[0],qk:it[1],a:it[2],ak:it[3],cn:it[4]};
+  if(mode==="qa"){
+    const it=L.qa&&L.qa[idx];if(!it||Array.isArray(it))return null;/* 題庫只收配圖變體格式，這裡保險再擋一次 */
+    const v=qaResolveItem(it);
+    return{mode:"qa",lesson:li,itemIdx:idx,key:key,q:v.q,qk:v.qk,a:v.a,ak:v.ak,cn:v.cn,img:v.img};
+  }
+  if(mode==="trans"){
+    const it=L.trans&&L.trans[idx];if(!it)return null;
+    return{mode:"trans",lesson:li,itemIdx:idx,key:key,q:it[0],qk:it[1],a:it[2],ak:it[3],cn:it[4]};
   }
   return null;
 }
@@ -2629,6 +2643,7 @@ async function examAsk(){
   const typeLabel={sub:"② 代換 · 造句",qa:"③ 應答 · 回答問題",trans:"🔁 轉換 · 依指示轉換"}[r.mode];
   $("examTypeLabel").textContent=typeLabel;$("examTypeLabel").style.display=typeLabel?"":"none";
   let expected,expectedKana;
+  showExamImage(r.mode==="qa"?r.img:null);
   if(r.mode==="sub"){
     $("examCue").textContent="（示範）"+r.s.base[0];
     await say(r.s.base[0]);/* 先播同句型基本句轉換示範，解決提示詞跨句型撞名的歧義問題——用範例示範，不靠語法術語標籤 */

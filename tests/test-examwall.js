@@ -5,7 +5,8 @@ const script = s.match(/<script>([\s\S]*)<\/script>/)[1];
 new Function(script);
 console.log("✅ 全 script 語法 OK");
 
-const blk = script.slice(script.indexOf("const EXAM_INIT="), script.indexOf("function examRenderAll"));
+const qaBlk = script.slice(script.indexOf("function qaResolveItem"), script.indexOf("function showQaImage"));
+const blk = qaBlk + script.slice(script.indexOf("const EXAM_INIT="), script.indexOf("function examRenderAll"));
 
 function mkEnv(lessons) {
   const mem = {};
@@ -21,33 +22,42 @@ function mkEnv(lessons) {
   return { env, mem, store, srsCalls };
 }
 
-// 3 課教材，每課 2 個 sub 句型、1 個 qa、第0課額外 1 個 trans
+// 3 課教材，每課 2 個 sub 句型、1 個 qa（第0/1課是舊5欄陣列格式、第2課是配圖變體格式）、第0課額外 1 個 trans
 const LESSONS3 = [0, 1, 2].map(i => ({
   t: "第" + (i + 1) + "課 測試",
   sub: [
     { p: "p" + i + "a", base: ["b", "bk", "bc"], cues: [["cue1", "ans1", "ansk1", "cn1"]] },
     { p: "p" + i + "b", base: ["b", "bk", "bc"], cues: [["cue2", "ans2", "ansk2", "cn2"]] },
   ],
-  qa: [["q" + i, "qk" + i, "a" + i, "ak" + i, "cn" + i]],
+  qa: i === 2
+    ? [{ q: "q2", qk: "qk2", variants: [{ img: "img2a.png", a: "a2", ak: "ak2", cn: "cn2" }] }]
+    : [["q" + i, "qk" + i, "a" + i, "ak" + i, "cn" + i]],
   trans: i === 0 ? [["t0", "tk0", "ta0", "tak0", "tcn0"]] : [],
 }));
 
 let fails = 0;
 const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (!cond) fails++; };
 
-// 初始窗口 + 題池組成（sub+trans，刻意不含qa/build/minpair——qa的答案是編出來的劇本事實無從推理，見程式碼註解）
+// 初始窗口 + 題池組成（sub+trans一定含；qa只收配圖變體格式，舊5欄陣列格式答案是編出來的劇本事實排除，見程式碼註解）
 {
   const { env } = mkEnv(LESSONS3);
   check(JSON.stringify(env.examWin.u) === "[0,1]", "無歷史紀錄 → 預設解鎖前2課");
 }
 {
-  // 精算：第0課 sub2+trans1=3，第1課 sub2+trans0=2，共5；qa刻意不算進題池
+  // 精算：第0課 sub2+trans1=3，第1課 sub2+trans0=2，共5；第0/1課qa是舊格式不算，第2課含配圖qa但還沒解鎖也不算
   const { env } = mkEnv(LESSONS3);
   const keys = env.examPoolKeys();
-  check(keys.length === 5, "題池精確計數：第0課3個(2sub+1trans)+第1課2個(2sub)=5，qa不算");
+  check(keys.length === 5, "題池精確計數：第0課3個(2sub+1trans)+第1課2個(2sub)=5，舊格式qa不算");
   check(keys.filter(k => k.indexOf("sub|") === 0).length === 4, "sub 題共4個（2課*各2句型）");
-  check(keys.filter(k => k.indexOf("qa|") === 0).length === 0, "qa 題共0個（刻意排除，答案是無從推理的劇本事實）");
+  check(keys.filter(k => k.indexOf("qa|") === 0).length === 0, "qa 題共0個（初始窗口內的qa都是舊格式，答案無從推理）");
   check(keys.filter(k => k.indexOf("trans|") === 0).length === 1, "trans 題共1個（只有第0課有）");
+}
+{
+  // 配圖變體格式的qa，課程一旦解鎖就應該進題池（這是本次新加的行為：解決qa可測驗性問題後把它放回題庫）
+  const { env } = mkEnv(LESSONS3);
+  env.examWin.u.push(2);
+  const keys = env.examPoolKeys();
+  check(keys.indexOf(env.examKey("qa", 2, 0)) >= 0, "配圖變體格式的qa在課程解鎖後會進題池");
 }
 
 // examPick 加權：答錯率高的 key 應更常被抽到
@@ -82,7 +92,8 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   const rSub = env.examResolve(env.examKey("sub", 1, 0));
   check(rSub.mode === "sub" && rSub.lesson === 1 && rSub.patternIdx === 0 && rSub.s.p === "p1a" && rSub.c[0] === "cue1", "examResolve 還原 sub 正確");
   const rQa = env.examResolve(env.examKey("qa", 2, 0));
-  check(rQa.mode === "qa" && rQa.lesson === 2 && rQa.q === "q2" && rQa.a === "a2", "examResolve 還原 qa 正確");
+  check(rQa.mode === "qa" && rQa.lesson === 2 && rQa.q === "q2" && rQa.a === "a2" && rQa.img === "img2a.png", "examResolve 還原 qa 正確（含配圖路徑）");
+  check(env.examResolve(env.examKey("qa", 0, 0)) === null, "舊5欄陣列格式的qa → examResolve 拒絕還原（保險擋一次，不該進題庫的題目就算被塞key進來也不解析）");
   const rTrans = env.examResolve(env.examKey("trans", 0, 0));
   check(rTrans.mode === "trans" && rTrans.q === "t0" && rTrans.a === "ta0", "examResolve 還原 trans 正確");
   check(env.examResolve(env.examKey("sub", 99, 0)) === null, "不存在的課 → null");
