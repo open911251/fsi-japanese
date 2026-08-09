@@ -26,7 +26,7 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 
 `fsi-japanese-trainer.html` 內的 `<script>` 分幾層：
 
-- **`LESSONS` 陣列**（約 367–942 行）：28 課教材資料，每課一個物件 `{t, g, listen, sub, qa, build}`。這是檔案的主體。
+- **`LESSONS` 陣列**（約 438–1400 行）：50課教材資料，每課一個物件 `{t, g, listen, sub, qa, build}`，選填 `trans`。這是檔案的主體。**2026-08-10 課次重整**：原本28課不是跟大家的日本語逐課對應（後段課次把多課文法壓縮合併），查證大家的日本語完整50課文型清單後重整成逐課對齊，28個舊課次已有內容搬到正確新位置，另外22個新課次目前是`{pending:true}`骨架（`t`/`g`齊全但`listen`/`sub`/`qa`皆為空陣列、`build`為`null`）等內容補齊，詳細對照表在 `C:\Users\open9\.claude\plans\robust-inventing-crane.md`。**pending課次機制**：`tests/validate-lessons.js`對pending課次只驗t/g；`fillLessons()`選單disable並標「（尚未建置）」；`examMaybeUnlock()`把pending課次視為自動達標（沒有題目可測，不會卡住後續解鎖窗口推進），一次解鎖會連續跳過整串pending課次直到下一個真的有內容的課；`planNextLesson()`（每日排課推進）同樣跳過pending課次找下一個可練的課。課次重整導致舊的以課次索引的localStorage資料全部錯位，`store`定義後有一段版本檢查（比對`fsi_lessons_n`跟`LESSONS.length`），偵測到課數變了就清空`fsi_score`/`fsi_srs`/`fsi_examwin`/`fsi_exammastery`/`fsi_examweight`/`fsi_examlog`/`fsi_plan`這幾個課次索引鍵，不留殘影。
 - **狀態機**：全域 `state` 物件（`mode`/`lesson`/`idx`/`running`/`runId`）。`runId` 遞增用於取消進行中的非同步播放迴圈（`sleep()` 會輪詢 `runId` 提早結束）。
 - **語音層**：`say()` 優先走 `synthCloud()`（Google Cloud TTS REST API，key 存 localStorage），失敗或無 key 時退回 `speakBrowser()`（Web Speech API）。
 - **五種練習模式**：`playItem()` 依 `state.mode`（listen/sub/qa/build/trans）決定播放與停頓流程；`runFrom()` 是主迴圈。sub 模式的項目有三種 type：`base`（基本句）、`prev`（代換詞預習，開關控制，不進 SRS）、`cue`（正式出題）。trans（轉換操練，🔁分頁）沿用 qa 的資料格式與播放邏輯（`playItem` 的 `qa`/`trans` 是同一分支）——給一句已學過的句子＋轉換指示（肯定→否定／過去／疑問），要自己套文法規則變出來，跟代換操練的「套現成詞」不同，練的是規則內化；資料存在每課的 `trans` 欄位（選填，目前只有第1課有內容），格式跟 `qa` 完全相同（5欄 `[指示句,指示假名,答案,答案假名,中文]`）。
@@ -63,9 +63,9 @@ node tests/test-voicevox.js fsi-japanese-trainer.html      # VOICEVOX 逐拍高�
 2. 依現有課文風格寫草稿：原創句子（不抄課本）、跟該課 `listen`/`sub`/`qa`/`build` 現有例句不撞句、難度不超過該課範圍。
 3. 丟給**獨立 agent**（不共用草稿時的思路/上下文）扮演母語日語老師，逐句核對文法、假名讀音、語感自然度、有沒有撞句——不要自己審自己的草稿。
 4. 依審查結果修正後才寫入 `LESSONS`，跑 `node tests/validate-lessons.js` 與 `node tests/test-shuffle.js` 確認格式與語法沒壞。
-5. 一次只做小批（2-8課或1-2課）試點，不要一口氣做完全部28課。
+5. 一次只做小批（2-8課或1-2課）試點，不要一口氣做完全部課次。
 
-**目前進度**（2026-08-09 更新）：`sub` 句型缺口第3-8課已補完（commit `552ce3d`），**第9-13課已補完**（第9課補上手/わかります/から共3個新句型，第10-13課各補2個新句型，全教材句型數41→52、代換詞226個，獨立agent審查過文法範圍/假名/語感/撞句皆無問題），**第14-28課還沒做**；`trans` 轉換操練只有第1課試點（commit `51f123d`），**第2-28課還沒做**。之後繼續擴充時直接照上面五步走，維持小批（本次批次是5課）不要一次衝完全部剩餘課次。
+**目前進度**（2026-08-10 更新，課次重整後）：全教材已擴展成50課對齊大家的日本語，其中**22課是`pending:true`骨架（無內容）**，優先度與對照表見 `C:\Users\open9\.claude\plans\robust-inventing-crane.md`。舊28課的內容擴充進度（重整前）：`sub` 句型缺口第3-13課已補完（全教材句型數41→52、代換詞226個），第14課（現對齊新第14課）以後的舊課次還沒補；`trans` 轉換操練第1、2課已完成（新第1、2課），其餘還沒做。**接下來擴充要優先處理pending骨架課次**（照上面五步走，一次只挑1-3個pending課次，不要一次衝完全部22個）。
 
 ## 規則
 

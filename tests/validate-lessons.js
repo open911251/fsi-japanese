@@ -11,6 +11,11 @@ const bad = (li, msg) => { errors++; console.log(`第${li + 1}課: ${msg}`); };
 
 LESSONS.forEach((L, i) => {
   if (typeof L.t !== "string" || typeof L.g !== "string") bad(i, "t/g 欄位缺失");
+  if (L.pending) {
+    // pending課次（骨架已建、內容待補）：只驗t/g，listen/sub/qa/build允許空
+    if (!Array.isArray(L.listen) || !Array.isArray(L.sub) || !Array.isArray(L.qa)) bad(i, "pending課次的listen/sub/qa仍須是陣列（可為空）");
+    return;
+  }
   if (!Array.isArray(L.listen)) bad(i, "listen 缺失");
   else L.listen.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 3) bad(i, `listen[${j}] 欄位數 ${x.length}≠3`); });
   if (!Array.isArray(L.sub)) bad(i, "sub 缺失");
