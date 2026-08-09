@@ -5,7 +5,7 @@ const script = s.match(/<script>([\s\S]*)<\/script>/)[1];
 new Function(script);
 console.log("✅ 全 script 語法 OK");
 
-const qaBlk = script.slice(script.indexOf("function qaResolveItem"), script.indexOf("function showQaImage"));
+const qaBlk = script.slice(script.indexOf("function fbNorm"), script.indexOf("function showQaImage"));
 const blk = qaBlk + script.slice(script.indexOf("const EXAM_INIT="), script.indexOf("function examRenderAll"));
 
 function mkEnv(lessons) {
@@ -17,6 +17,7 @@ function mkEnv(lessons) {
   const env = new Function("LESSONS", "store", "srsMark", "srsKey", blk + `
     return {examKey,examPoolKeys,examPick,examResolve,examMasteryBump,examWeightBump,
             examMaybeUnlock,examWinBump,examLessonAchieved,examSrsKeyFor,examStatsText,examLogPush,
+            examQaGradable,fbSim,
             examWin,examMastery,examWeight,examLog,EXAM_MINN,EXAM_THRESH,EXAM_LOGCAP,EXAM_FRESH_DAYS};
   `)(lessons, store, srsMark, srsKey);
   return { env, mem, store, srsCalls };
@@ -158,6 +159,52 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   env.examWinBump(0, true); env.examWinBump(0, true); // n=2 < EXAM_MINN=4
   const unlocked = env.examWinBump(1, true);
   check(unlocked === null, "樣本數不足 EXAM_MINN 時，即使正確率100%也不解鎖（防單次僥倖）");
+}
+
+// examQaGradable：變體答案彼此太像時排除（2026-08-09 修復：實測「あちらです」vs「こちらです」fbSim=0.8
+// 超過測驗判定門檻0.75，代表答反方向還是可能被判對，這種qa不該進題庫自動評分）
+{
+  const { env } = mkEnv(LESSONS3);
+  check(env.fbSim("あちらです。", "こちらです。") >= env.EXAM_THRESH, "驗證情境本身有效：這組真實答案的相似度確實超過判定門檻");
+  check(env.fbSim("それはペンです。", "それは鍵です。") < env.EXAM_THRESH, "安全上限=判定門檻本身，不留保守margin：門檻以下的組合（如ペン/鍵=0.71）不該被誤排除");
+  const gradableOk = env.examQaGradable({ variants: [{ a: "あそこです。" }, { a: "会議室です。" }] });
+  check(gradableOk === true, "答案明顯不同 → 可評分，放行");
+  const gradableBad = env.examQaGradable({ variants: [{ a: "あちらです。" }, { a: "こちらです。" }] });
+  check(gradableBad === false, "答案太像（近似同音異義詞級別） → 不可評分，排除");
+}
+{
+  // 題池整合：把第2課（配圖變體格式）其中一個qa換成太像的變體組，應該被排除；另一個維持可評分
+  const lessons = JSON.parse(JSON.stringify(LESSONS3));
+  lessons[2].qa.push({ q: "q2b", qk: "qk2b", variants: [{ img: "x.png", a: "あちらです。", ak: "あちらです。", cn: "cn" }, { img: "y.png", a: "こちらです。", ak: "こちらです。", cn: "cn" }] });
+  const { env } = mkEnv(lessons);
+  env.examWin.u.push(2);
+  const keys = env.examPoolKeys();
+  check(keys.indexOf(env.examKey("qa", 2, 0)) >= 0, "答案可區分的配圖qa（原本那題）仍在題池");
+  check(keys.indexOf(env.examKey("qa", 2, 1)) === -1, "答案太像的配圖qa（新加的あちら/こちら組）被排除出題池");
+}
+
+// examPick 單輪不重複：exclude集合排除已抽過的key，池子排完才解禁重複
+// （2026-08-09 修復：兩位獨立專家指出小題庫+高權重會讓同一題在同一輪內反覆出現，這是體感噪音不是bug，
+//  加不放回抽樣直接解決，跟既有的答錯加權機制並存不衝突）
+{
+  const { env } = mkEnv(LESSONS3);
+  const keys = env.examPoolKeys(); // 第0課3個(2sub+1trans)+第1課2個(2sub)=5
+  const exclude = new Set(keys.slice(0, keys.length - 1)); // 排除除了最後一個以外的所有key
+  let hitsRemaining = 0;
+  for (let i = 0; i < 50; i++) if (env.examPick(exclude) === keys[keys.length - 1]) hitsRemaining++;
+  check(hitsRemaining === 50, "池子只剩1個key沒抽過時，不放回抽樣一定回傳那個剩下的key（不會抽到已排除的）");
+}
+{
+  const { env } = mkEnv(LESSONS3);
+  const keys = env.examPoolKeys();
+  const exclude = new Set(keys); // 全部key都已經抽過（池子排完了）
+  const result = env.examPick(exclude);
+  check(result !== null && keys.indexOf(result) >= 0, "池子被排完後不會回傳null，而是解禁重複、從完整池子裡繼續抽");
+  check(exclude.size === 0, "池子解禁時exclude集合被清空，不是保留舊排除紀錄");
+}
+{
+  const { env } = mkEnv(LESSONS3);
+  check(env.examPick() !== null, "沒傳exclude時維持原本行為（向下相容，不影響既有呼叫端）");
 }
 
 // examLogPush：FIFO，上限 EXAM_LOGCAP

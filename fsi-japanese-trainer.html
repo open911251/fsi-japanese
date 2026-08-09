@@ -518,7 +518,13 @@ qa:[
 {q:"この本は日本語の本ですか。",qk:"このほんは にほんごのほんですか。",variants:[
   {img:"images/qa/l2_book_ja.png",a:"はい、日本語の本です。",ak:"はい、にほんごのほんです。",cn:"這是日文書嗎？→ 是的，是日文書。"},
   {img:"images/qa/l2_book_en.png",a:"いいえ、英語の本です。",ak:"いいえ、えいごのほんです。",cn:"這是日文書嗎？→ 不，是英文書。"}]}],
-build:{full:["あれはわたしの友達の新しいカメラです。","あれは わたしのともだちの あたらしいカメラです。","那是我朋友的新相機。"],parts:["カメラです。","新しいカメラです。","友達の新しいカメラです。","わたしの友達の新しいカメラです。","あれはわたしの友達の新しいカメラです。"]}},
+build:{full:["あれはわたしの友達の新しいカメラです。","あれは わたしのともだちの あたらしいカメラです。","那是我朋友的新相機。"],parts:["カメラです。","新しいカメラです。","友達の新しいカメラです。","わたしの友達の新しいカメラです。","あれはわたしの友達の新しいカメラです。"]},
+trans:[
+["「それは新聞じゃありません」を肯定形にしてください。","「それは しんぶんじゃありません」を こうていけいに してください。","それは新聞です。","それは しんぶんです。","請把「那不是報紙」改成肯定形。→ 那是報紙。"],
+["「これは地図です」を否定形にしてください。","「これは ちずです」を ひていけいに してください。","これは地図じゃありません。","これは ちずじゃありません。","請把「這是地圖」改成否定形。→ 這不是地圖。"],
+["「あれはあなたの帽子です」を疑問文にしてください。","「あれは あなたの ぼうしです」を ぎもんぶんに してください。","あれはあなたの帽子ですか。","あれは あなたの ぼうしですか。","請把「那是你的帽子」改成疑問句。→ 那是你的帽子嗎？"],
+["「それは部長の靴です」を否定形にしてください。","「それは ぶちょうの くつです」を ひていけいに してください。","それは部長の靴じゃありません。","それは ぶちょうの くつじゃありません。","請把「那是部長的鞋子」改成否定形。→ 那不是部長的鞋子。"],
+["「これは友達のコートです」を疑問文にしてください。","「これは ともだちの コートです」を ぎもんぶんに してください。","これは友達のコートですか。","これは ともだちの コートですか。","請把「這是朋友的外套」改成疑問句。→ 這是朋友的外套嗎？"]]},
 
 {t:"第3課 ここ・そこ・あそこ（場所）",g:"ここ／そこ／あそこ／どこ、N は 場所 です",
 listen:[
@@ -2487,22 +2493,41 @@ let examLog=[];try{examLog=JSON.parse(store.get("fsi_examlog","[]"))||examLog;}c
 function examLogPush(ev){examLog.push(ev);if(examLog.length>EXAM_LOGCAP)examLog=examLog.slice(examLog.length-EXAM_LOGCAP);store.set("fsi_examlog",JSON.stringify(examLog));}
 function examPatternCount(lesson){const L=LESSONS[lesson];return L&&L.sub?L.sub.length:0;}
 function examTransCount(lesson){const L=LESSONS[lesson];return L&&L.trans?L.trans.length:0;}
+function examQaGradable(it){/* 配圖變體格式的qa，答案彼此太像時STT模糊比對會誤判——實測「あちらです」跟「こちらです」
+  （第3課電梯題）fbSim高達0.8，超過測驗判定門檻EXAM_THRESH(0.75)，代表使用者講反方向還是可能被判對，這種
+  答案组不適合拿來自動評分（日常③應答練習沒事，因為那邊只播正解不判對錯）。安全上限刻意直接等於判定門檻本身
+  （不是留保守margin）：門檻以下（例如實測「それはペンです」vs「それは鍵です」＝0.71）在真實評分流程裡本來
+  就不會被誤判過關，排除它只是無謂縮小題庫；反過來也意外抓到第二個真bug——L1「山田さん」vs「田中さん」兩個
+  人物身份變體相似度同樣是0.8，跟電梯題是一模一樣的風險，一併排除 */
+  const EXAM_QA_SIM_SAFE=EXAM_THRESH;
+  const answers=it.variants.map(v=>v.a);
+  for(let i=0;i<answers.length;i++)for(let j=i+1;j<answers.length;j++)
+    if(fbSim(answers[i],answers[j])>=EXAM_QA_SIM_SAFE)return false;
+  return true;
+}
 function examPoolKeys(){/* qa 只收有配圖變體的題目（{q,qk,variants} 物件格式）：純5欄陣列格式的qa答案是編出來的
   劇本事實（例如「這本書是英文書」），沒有圖片/前提脈絡使用者根本無從推理，日常③應答練習沒問題（聽完會播
   正解句讓你跟讀，不要求答對），但測驗要求「答對才算過」，這個假設在這種題目上不成立——2026-08-09 使用者
-  實測直接踩到才發現。配圖變體格式的答案由圖片決定，可以公平測驗，所以只有這種格式才放進題庫 */
+  實測直接踩到才發現。配圖變體格式的答案由圖片決定，可以公平測驗，所以只有這種格式才放進題庫；
+  變體答案彼此太像（見 examQaGradable）的也排除，理由相同：測驗要求「答對才算過」，模糊誤判會侵蝕這個假設 */
   const out=[];
   examWin.u.forEach(li=>{
     const L=LESSONS[li];
     for(let pi=0;pi<examPatternCount(li);pi++)out.push(examKey("sub",li,pi));
     for(let ti=0;ti<examTransCount(li);ti++)out.push(examKey("trans",li,ti));
-    if(L&&L.qa)L.qa.forEach((it,qi)=>{if(!Array.isArray(it))out.push(examKey("qa",li,qi));});
+    if(L&&L.qa)L.qa.forEach((it,qi)=>{if(!Array.isArray(it)&&examQaGradable(it))out.push(examKey("qa",li,qi));});
   });
   return out;
 }
-function examPick(){/* 加權抽題：比照 mpPick，答錯率高的優先，沒練過視為50%錯誤率；
-  久未被抽到的已精熟項目加一點新鮮度回補，避免顏色牆變成只長不驗的歷史紀錄 */
-  const keys=examPoolKeys();if(!keys.length)return null;
+function examPick(exclude){/* 加權抽題：比照 mpPick，答錯率高的優先，沒練過視為50%錯誤率；
+  久未被抽到的已精熟項目加一點新鮮度回補，避免顏色牆變成只長不驗的歷史紀錄。
+  exclude（Set，選填）＝這輪測驗已經抽過的key，先從候選裡排除，池子被排到空了才解禁重複——
+  兩位獨立專家（FSI教學法／測驗架構）都指出：小題庫＋答錯4倍權重會讓同一題在同一輪內被反覆抽中，
+  這不是統計異常，是「加權機制正確地做它該做的事」的副作用，答錯權重本身不用改，只要在單輪內先把
+  沒問過的問完，比起無條件允許重複更貼近「測完整個範圍」的體感（2026-08-09 使用者實測回報 */
+  const all=examPoolKeys();if(!all.length)return null;
+  let keys=(exclude&&exclude.size)?all.filter(k=>!exclude.has(k)):all;
+  if(!keys.length){if(exclude)exclude.clear();keys=all;}/* 池子被排完了，這輪重新開放，不是bug是池子比session短 */
   const now=Date.now();
   const w=keys.map(k=>{
     const st=examWeight[k];
@@ -2631,10 +2656,12 @@ function examFinishAnswer(key,lesson,result){/* 共用：答案判定後的狀�
 }
 const EXAM_SESSION_LEN=10;
 let examSessionN=0;
+let examSeen=new Set();/* 這輪測驗已經抽過的key，examPick靠這個避免單輪內同題重複，池子耗盡才解禁 */
 async function examAsk(){
-  if(examSessionN>=EXAM_SESSION_LEN){examSessionN=0;$("examPlay").textContent="🔊 出題";}
+  if(examSessionN>=EXAM_SESSION_LEN){examSessionN=0;examSeen.clear();$("examPlay").textContent="🔊 出題";}
   if(!$("sttUrl").value.trim()){$("examStatus").textContent="請先在「本地 AI 設定」填 STT URL 才能使用綜合測驗（需要能自動判斷對錯）。";return;}
-  const key=examPick();
+  const key=examPick(examSeen);
+  if(key)examSeen.add(key);
   if(!key){$("examStatus").textContent="目前沒有可測驗的內容。";return;}
   const r=examResolve(key);if(!r){$("examStatus").textContent="⚠ 找不到題目內容。";return;}
   examCur=r;
