@@ -217,6 +217,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <button data-mode="shadow">⑦ 影子跟讀</button>
     <button data-mode="roleplay">⑧ 角色扮演</button>
     <button data-mode="exam">⑨ 綜合測驗</button>
+    <button data-mode="hw">⑩ 作業</button>
     <button data-mode="copy">📝 抄寫</button>
     <button data-mode="custom">＋ 自訂教材</button>
   </div>
@@ -403,6 +404,33 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <div id="examResult" style="margin-top:10px;line-height:1.9;"></div>
   <div class="status" id="examStatus"></div>
+</div>
+
+<div class="card" id="homeworkCard" style="display:none;">
+  <b>📮 作業（老師批改）</b>　<span class="small">做5題應答練習，做完一次繳交。老師（LLM）批改文法/用詞，腔調另外用既有的分析管線，不打分數——這是作業講評，不是考試（需先在「本地 AI 設定」填 LLM URL）</span>
+  <div id="hwSelectArea" style="margin-top:10px;">
+    <button class="primary" id="hwStartBtn">🎲 抽5題開始</button>
+  </div>
+  <div id="hwRecordArea" style="display:none;margin-top:10px;">
+    <div class="small" id="hwProgress"></div>
+    <div class="jp" id="hwQText" style="margin-top:6px;"></div>
+    <div class="kana" id="hwQKana"></div>
+    <img id="hwImg" style="display:none;max-width:220px;max-height:220px;margin:8px 0;border:1px solid var(--line);border-radius:8px;">
+    <div class="row" style="margin-top:8px;">
+      <button id="hwRecBtn">🎙 開始錄音</button>
+      <button id="hwNextBtn">下一題 →</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="hwSubmitBtn">📮 送出批改</button>
+    </div>
+    <div class="status" id="hwStatus"></div>
+  </div>
+  <div id="hwResultArea" style="display:none;margin-top:10px;">
+    <div id="hwResultList"></div>
+    <div class="row" style="margin-top:10px;">
+      <button id="hwNewBatch">🔁 開始新一批</button>
+    </div>
+  </div>
 </div>
 
 <div class="card" id="copyCard" style="display:none;">
@@ -1462,7 +1490,7 @@ function switchMode(m){
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
   showQaImage(null);showExamImage(null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam"||m==="hw")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
@@ -1471,12 +1499,14 @@ function switchMode(m){
   $("copyCard").style.display=m==="copy"?"":"none";
   $("examCard").style.display=m==="exam"?"":"none";
   $("examQuizCard").style.display=m==="exam"?"":"none";
+  $("homeworkCard").style.display=m==="hw"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
   if(m==="copy")copyRender();
   if(m==="exam")examRenderAll();
   if(m!=="shadow")shadowPauseAll();
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"&&m!=="exam"){
+  if(m!=="hw")hwStop();/* 離開作業分頁：取消任何進行中的錄音，不寫入hwState（比照stopRun透過runId取消的模式） */
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"&&m!=="exam"&&m!=="hw"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -2598,6 +2628,221 @@ $("personaAvatarPick").onchange=e=>{
 };
 $("personaAvatarClear").onclick=()=>{store.set("fsi_persona_avatar","");$("personaAvatarPick").value="";teacherChatRender();};
 $("tdStartDate").onchange=()=>{store.set("fsi_start_date",$("tdStartDate").value);tdWeekInfoRender();teacherWeekTableRender();};
+
+/* ================= 作業批改（⑩分頁，老師改考卷，跟teacherChat的人設/歷史完全脫鉤） =================
+   使用者做5題qa錄音，全部做完（或至少1題）才一次繳交，跑一輪批次處理：STT逐題轉錄、
+   沿用⑤/操練回饋現成的腔調分析管線（pitchTrack/contour/vvMorasFor/vvScore/fbHints/drawPitch）、
+   一次LLM呼叫（塞5題）拿文法/用詞講評+整體摘要。這是「作業不是考試」定調的功能：不打分數、
+   不用逐字比對正解，只給質性建議。hwState是獨立小狀態機（比照角色扮演／跟讀模式的慣例），純記憶體不
+   存localStorage。SRS完全不碰（不呼叫srsMark，理由同examQaGradable()排除情境不明確的答案）；
+   markPractice()在使用者開始錄第一題時就呼叫，不等批改完成，避免streak被LLM在不在線卡住。 */
+let hwState=null,hwRecording=false,hwMediaRec=null,hwRecChunks=[];
+function hwReady(){return!!$("llmUrl").value.trim();}
+function hwPickItems(n){/* 從目前課程的qa項目隨機選n題，純陣列格式跟配圖variants格式都可以選 */
+  const L=curLesson();
+  if(!L||!L.qa||!L.qa.length)return[];
+  const idxs=L.qa.map((_,i)=>i);
+  for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idxs[i],idxs[j]]=[idxs[j],idxs[i]];}
+  return idxs.slice(0,Math.min(n,idxs.length)).map(qi=>{
+    const it=L.qa[qi];
+    const r=Array.isArray(it)?{q:it[0],qk:it[1],a:it[2],ak:it[3],cn:it[4],img:null}:qaResolveItem(it);
+    return{qi,q:r.q,qk:r.qk,a:r.a,ak:r.ak,cn:r.cn,img:r.img};
+  });
+}
+function hwWarmup(){/* 進作業分頁那刻觸發，讓LLM趁使用者錄5題的空檔冷啟動進顯存；丟棄回應、不進teacherChatHistory */
+  if(!hwReady())return;
+  try{
+    fetch($("llmUrl").value.trim(),{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:$("llmModel").value.trim()||undefined,messages:[{role:"user",content:"ok"}],stream:false})
+    }).catch(()=>{});
+  }catch(e){}
+}
+function hwStart(){
+  const items=hwPickItems(5);
+  if(!items.length){setStatus("hwStatus","這課沒有應答練習題，換一課再試。");return;}
+  hwState={items,answers:items.map(()=>null),cursor:0,runId:(hwState?hwState.runId:0)+1,phase:"collecting",result:null,gradeError:null};
+  markPractice();
+  hwWarmup();
+  $("hwSelectArea").style.display="none";
+  $("hwResultArea").style.display="none";
+  $("hwRecordArea").style.display="";
+  hwRenderRecordStep();
+}
+function hwRenderRecordStep(){
+  const hw=hwState;if(!hw)return;
+  const it=hw.items[hw.cursor];
+  $("hwProgress").textContent="第 "+(hw.cursor+1)+" / "+hw.items.length+" 題　（已錄 "+hw.answers.filter(Boolean).length+" 題）";
+  $("hwQText").textContent=it.q;
+  $("hwQKana").textContent=it.qk;
+  if(it.img){$("hwImg").src=it.img;$("hwImg").style.display="";}else{$("hwImg").style.display="none";}
+  $("hwRecBtn").innerHTML="🎙 開始錄音";
+  $("hwNextBtn").disabled=hw.cursor>=hw.items.length-1;
+  setStatus("hwStatus","");
+}
+async function hwToggleRec(){
+  const hw=hwState;if(!hw)return;
+  if(hwRecording){hwMediaRec.stop();return;}
+  try{if(!fbStream)fbStream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);}
+  catch(e){setStatus("hwStatus","⚠ 無法使用麥克風："+e.message);return;}
+  const myRunId=hw.runId,myCursor=hw.cursor;
+  hwMediaRec=newRecorder(fbStream);hwRecChunks=[];
+  hwMediaRec.ondataavailable=e=>{if(e.data.size)hwRecChunks.push(e.data);};
+  hwMediaRec.onstop=()=>{
+    hwRecording=false;
+    if($("hwRecBtn"))$("hwRecBtn").innerHTML="🎙 開始錄音";
+    if(!hwState||hwState.runId!==myRunId)return;/* 這批已經被取消/離開分頁 */
+    const blob=new Blob(hwRecChunks,{type:hwMediaRec.mimeType||"audio/webm"});
+    if(blob.size){hwState.answers[myCursor]={blob,sttText:null,sttOk:null,pitchResult:null};setStatus("hwStatus","錄好了，可以下一題或送出批改。");}
+    else setStatus("hwStatus","沒錄到聲音，再試一次。");
+    hwRenderRecordStep();
+  };
+  hwMediaRec.start();hwRecording=true;
+  $("hwRecBtn").innerHTML='<span class="rec-dot"></span> 停止';
+  setStatus("hwStatus","🎙 錄音中…");
+}
+function hwNext(){
+  const hw=hwState;if(!hw||hw.cursor>=hw.items.length-1)return;
+  hw.cursor++;hwRenderRecordStep();
+}
+function hwCanSubmit(hw){return!!hw&&hw.answers.some(a=>a&&a.blob);}
+function hwStop(){/* 中斷目前錄音（離開分頁時用），bump runId讓onstop寫入失效，不留殘影 */
+  if(hwState)hwState.runId++;
+  if(hwRecording&&hwMediaRec){try{hwMediaRec.stop();}catch(e){}hwRecording=false;}
+}
+function hwSystemPrompt(){/* 刻意跟teacherSystemPrompt()/fsi_persona_text脫鉤：沒有名字沒有人設風格，
+  只有固定的「認真母語教師」身分，避免使用者自訂人設語氣稀釋掉批改的準確度 */
+  return"你是一位認真、誠懇的日語母語教師，正在批改學生的口說作業。這是作業講評，不是考試——不要求學生的說法要跟參考答案逐字一樣，只要語意通順、文法正確就好。"+
+    "請針對每一題指出具體的文法或用詞問題，給一個更自然的說法當參考（範例日文句子請附上假名讀音）；如果某題的學生作答標示「(未辨識到語音)」，代表語音辨識沒收到內容，不要當作學生答錯，提醒可能是辨識問題即可。"+
+    "全部題目講評完後，另外用「總評」統整這批常見的問題模式，給接下來練習方向的建議。絕對不要打分數、不要給等第，全部用文字講評。"+
+    "請照這個格式輸出，每個標題獨立一行：\n第1題\n（講評內容）\n\n第2題\n（講評內容）\n\n…\n\n總評\n（整體重點）";
+}
+function hwParseGradingResponse(text,n){/* 純函式：把LLM回應切成逐題+總評，格式跑掉就整包退回總評、不拋例外 */
+  const out={perItem:new Array(n).fill(""),summary:""};
+  if(!text)return out;
+  const parts=text.split(/^第\s*([0-9]+)\s*題\s*$/m);
+  if(parts.length>=3){
+    for(let i=1;i<parts.length-1;i+=2){
+      const idx=parseInt(parts[i],10)-1;
+      let body=parts[i+1];
+      const sm=body.match(/^([\s\S]*?)^總評\s*$([\s\S]*)$/m);
+      if(sm){body=sm[1];out.summary=sm[2].trim();}
+      if(idx>=0&&idx<n)out.perItem[idx]=body.trim();
+    }
+  }else{
+    out.summary=text.trim();/* 完全切不出來，整包當總評顯示，不是丟例外 */
+  }
+  if(!out.summary){
+    const sm2=text.match(/^總評\s*$([\s\S]*)$/m);
+    if(sm2)out.summary=sm2[1].trim();
+  }
+  return out;
+}
+async function hwGradeCall(items){
+  const lines=items.map((it,i)=>"第"+(i+1)+"題\n題目：「"+it.q+"」\n預期方向（僅供參考，不要求逐字一致）：「"+it.a+"」\n學生實際說的（語音辨識文字）：「"+(it.sttText||"(未辨識到語音)")+"」");
+  const messages=[{role:"system",content:hwSystemPrompt()},{role:"user",content:lines.join("\n\n")}];
+  const r=await fetch($("llmUrl").value.trim(),{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:$("llmModel").value.trim()||undefined,messages,stream:false})});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return((await r.json()).choices[0].message.content||"").trim();
+}
+async function hwPitchFor(blob,text){/* 沿用fbPitch()同一套腔調管線，只是畫到動態canvas而非固定#fbCanvas；沒填TTS key靜默回null */
+  if(!$("apiKey").value.trim())return null;
+  try{
+    const url=await synthCloud(text);
+    const md=await decodeUrl(url);
+    const my=await actxGet().decodeAudioData(await blob.arrayBuffer());
+    const A=contour(pitchTrack(md),48),B=contour(pitchTrack(my),48);
+    if(!A||!B)return null;
+    const moras=await vvMorasFor(text);
+    const sim=Math.max(0,Math.round((corrOf(A.pts,B.pts)+1)/2*100));
+    const durDiff=Math.round((B.dur-A.dur)/A.dur*100);
+    const hints=fbHints(A.pts,B.pts,text);
+    return{A,B,moras,sim,durDiff,hints,scored:moras?await vvScore(text,B,moras):null};
+  }catch(e){return null;}
+}
+async function hwSubmit(){
+  const hw=hwState;if(!hw||!hwCanSubmit(hw))return;
+  hwStop();hw.runId++;/* hwStop()已bump過一次取消錄音，這裡再bump一次拿新runId當這次批改的專屬憑證 */
+  const runId=hw.runId;
+  hw.phase="grading";
+  $("hwRecordArea").style.display="none";
+  $("hwResultArea").style.display="";
+  $("hwResultList").innerHTML="⏳ 批改中…（語音辨識與腔調分析）";
+  for(let i=0;i<hw.items.length;i++){
+    const a=hw.answers[i];if(!a)continue;
+    try{a.sttText=await sttTranscribe(a.blob);a.sttOk=!!a.sttText;}
+    catch(e){a.sttText=null;a.sttOk=false;}
+    if(hwState!==hw||hw.runId!==runId)return;/* 使用者中途離開/開新一批，這輪處理作廢 */
+    a.pitchResult=await hwPitchFor(a.blob,hw.items[i].a);
+    if(hwState!==hw||hw.runId!==runId)return;
+  }
+  hwRenderResults();/* 先渲染STT+腔調，LLM講評非同步補上，不讓使用者等LLM才看到任何東西 */
+  if(!hwReady()){hw.gradeError="尚未設定 LLM URL，只顯示語音辨識與腔調分析結果。";hwRenderResults();return;}
+  try{
+    const raw=await hwGradeCall(hw.items.map((it,i)=>({q:it.q,a:it.a,sttText:hw.answers[i]?hw.answers[i].sttText:null})));
+    if(hwState!==hw||hw.runId!==runId)return;
+    hw.result=hwParseGradingResponse(raw,hw.items.length);
+    hw.phase="done";hw.gradeError=null;
+    hwRenderResults();
+  }catch(e){
+    if(hwState!==hw||hw.runId!==runId)return;
+    hw.gradeError="⚠ 連不上老師（隧道沒開？或伺服器未允許 CORS）——腔調分析結果已顯示，文法講評可按「重新送出」再試一次。";
+    hwRenderResults();
+  }
+}
+async function hwRetryGrade(){
+  const hw=hwState;if(!hw)return;
+  hw.gradeError=null;
+  setStatus("hwStatus","⏳ 重新送出批改中…");
+  try{
+    const raw=await hwGradeCall(hw.items.map((it,i)=>({q:it.q,a:it.a,sttText:hw.answers[i]?hw.answers[i].sttText:null})));
+    hw.result=hwParseGradingResponse(raw,hw.items.length);
+    hw.phase="done";
+  }catch(e){
+    hw.gradeError="⚠ 還是連不上，稍後再試。";
+  }
+  hwRenderResults();
+}
+function hwRenderResults(){
+  const hw=hwState;if(!hw)return;
+  const html=hw.items.map((it,i)=>{
+    const a=hw.answers[i];
+    const stt=a?(a.sttText||"(未辨識到語音)"):"(這題沒有錄音)";
+    const fb=hw.result?(hw.result.perItem[i]||""):"";
+    const pr=a&&a.pitchResult;
+    const audioTag=a?'<audio controls src="'+URL.createObjectURL(a.blob)+'" style="height:28px;margin-top:4px;"></audio>':"";
+    return'<div class="card" style="margin-top:8px;">'+
+      '<b>第'+(i+1)+'題</b> '+teacherEsc(it.q)+'<div class="small">'+teacherEsc(it.qk)+'</div>'+
+      '<div class="small" style="margin-top:4px;">你說：'+teacherEsc(stt)+'</div>'+
+      audioTag+
+      (fb?'<div style="margin-top:6px;white-space:pre-wrap;">📝 '+teacherEsc(fb)+'</div>':(hw.phase==="grading"?'<div class="small">⏳ 講評處理中…</div>':""))+
+      (pr?'<div class="small" style="margin-top:4px;">🎯 腔調相似度 '+pr.sim+'%　⏱ 語速差 '+(pr.durDiff>0?"+":"")+pr.durDiff+"%"+(pr.hints.length?"　💡 "+pr.hints.join("、"):"")+'</div>'+
+          '<canvas id="hwCv'+i+'" width="480" height="90" style="max-width:100%;margin-top:4px;"></canvas>'+
+          '<div id="hwMora'+i+'" style="margin-top:2px;"></div>':"")+
+      '</div>';
+  }).join("");
+  const summary=(hw.result&&hw.result.summary)?'<div class="card" style="margin-top:8px;"><b>📮 老師總評</b><div style="white-space:pre-wrap;margin-top:4px;">'+teacherEsc(hw.result.summary)+'</div></div>':"";
+  const err=hw.gradeError?('<div class="status">'+teacherEsc(hw.gradeError)+'</div><div class="row"><button id="hwRetryBtn">🔁 重新送出</button></div>'):"";
+  $("hwResultList").innerHTML=html+summary+err;
+  hw.items.forEach((it,i)=>{
+    const a=hw.answers[i];
+    if(a&&a.pitchResult&&$("hwCv"+i)){
+      drawPitch(a.pitchResult.A.pts,a.pitchResult.B.pts,$("hwCv"+i),a.pitchResult.moras);
+      renderMoraRow("hwMora"+i,a.pitchResult.scored);
+    }
+  });
+  if($("hwRetryBtn"))$("hwRetryBtn").onclick=hwRetryGrade;
+}
+function hwNewBatch(){
+  hwStop();hwState=null;
+  $("hwResultArea").style.display="none";
+  $("hwSelectArea").style.display="";
+}
+$("hwStartBtn").onclick=hwStart;
+$("hwRecBtn").onclick=hwToggleRec;
+$("hwNextBtn").onclick=hwNext;
+$("hwSubmitBtn").onclick=hwSubmit;
+$("hwNewBatch").onclick=hwNewBatch;
 
 /* ================= 迷你角色扮演對話（獨立於進度陪伴角色，不共用歷史／persona） ================= */
 let rpScenario=null,rpHistory=[],rpTurnIdx=-1,rpDone=false,rpLogEntries=[];
