@@ -16,7 +16,7 @@ const make = new Function("OPTS", lessons + `
   const state={mode:OPTS.mode,lesson:OPTS.lesson,idx:0,review:[]};
   function curLesson(){return LESSONS[state.lesson];}
   ${blk}
-  return {items,itemsRaw,bump:()=>{shufSeed++;},state};
+  return {items,itemsRaw,bump:()=>{shufSeed++;},state,subCapMap};
 `);
 
 const key = x => JSON.stringify(x);
@@ -38,12 +38,15 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   for (let i = 0; i < 20 && !changed; i++) { m.bump(); if (key(m.items()) !== key(a)) changed = true; }
   check(changed, "qa 換 seed 後順序會變（20 次內至少一次）");
 }
-// sub 隨機：每個句型的基本句仍在其 cues 之前、cues 集合不變
+// sub 隨機：每個句型的基本句仍在其 cues 之前、cues 集合不變（受 subCap 影響：cue 數超過上限時，
+// 「不變的集合」是 subCapMap() 選出的那個上限子集，不是句型完整的 s.cues——第4-9課加厚代換詞後
+// 部分句型cue數已經超過預設上限4，這條測試原本沒考慮到cap會截斷，2026-08-10改用subCapMap()當基準）
 {
-  const m = make({ checked: true, mode: "sub", lesson: 7 }); // 第8課有 2 個句型
+  const m = make({ checked: true, mode: "sub", lesson: 7 }); // 第8課有 3 個句型
   for (let t = 0; t < 30; t++) {
     m.bump();
     const arr = m.items();
+    const cap = m.subCapMap();
     let curBase = null, ok = true;
     const seen = new Map();
     arr.forEach(it => {
@@ -51,35 +54,43 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
       else { if (it.s !== curBase) ok = false; seen.get(it.s).push(it.c); }
     });
     if (!ok) { check(false, "sub 有 cue 出現在自己的基本句之前／跨句型"); break; }
-    for (const [s2, cues] of seen) if (key(cues.slice().sort()) !== key(s2.cues.slice().sort())) { check(false, "sub cues 集合改變"); ok = false; }
+    for (const [s2, cues] of seen) {
+      const expected = cap.get(s2);
+      if (key(cues.slice().sort()) !== key(expected.slice().sort())) { check(false, "sub cues 集合改變"); ok = false; }
+    }
     if (!ok) break;
-    if (t === 29) check(true, "sub 隨機 30 輪：基本句永遠在前、cues 集合不變");
+    if (t === 29) check(true, "sub 隨機 30 輪：基本句永遠在前、cues 集合不變（受subCap上限）");
   }
 }
 // 代換詞預習：base → 全部 prev（原順序）→ cues；關閉時無 prev
+// （同樣要用 subCapMap() 算出的上限子集當基準，不能直接用 s.cues.length 切片）
 {
   const off = make({ checked: false, mode: "sub", lesson: 7 });
   check(!off.items().some(x => x.type === "prev"), "預習關閉 → 無 prev 項目");
   const m = make({ checked: false, mode: "sub", lesson: 7, preview: true });
   const arr = m.items();
+  const capM = m.subCapMap();
   let ok = true;
   arr.filter(x => x.type === "base").map(x => x.s).forEach(s => {
+    const capped = capM.get(s);
     const bi = arr.findIndex(x => x.type === "base" && x.s === s);
-    const prevs = arr.slice(bi + 1, bi + 1 + s.cues.length);
-    if (!prevs.every((x, j) => x.type === "prev" && x.c === s.cues[j])) ok = false;
-    const cues = arr.slice(bi + 1 + s.cues.length, bi + 1 + 2 * s.cues.length);
+    const prevs = arr.slice(bi + 1, bi + 1 + capped.length);
+    if (!prevs.every((x, j) => x.type === "prev" && x.c === capped[j])) ok = false;
+    const cues = arr.slice(bi + 1 + capped.length, bi + 1 + 2 * capped.length);
     if (!cues.every(x => x.type === "cue" && x.s === s)) ok = false;
   });
   check(ok, "預習開啟 → base 後接原順序 prev，再接 cues");
   const ms = make({ checked: true, mode: "sub", lesson: 7, preview: true });
   const arrS = ms.items();
+  const capS = ms.subCapMap();
   let okS = true;
   arrS.filter(x => x.type === "base").map(x => x.s).forEach(s => {
+    const capped = capS.get(s);
     const bi = arrS.findIndex(x => x.type === "base" && x.s === s);
-    const prevs = arrS.slice(bi + 1, bi + 1 + s.cues.length);
-    if (!prevs.every((x, j) => x.type === "prev" && x.c === s.cues[j])) okS = false;
-    const cues = arrS.slice(bi + 1 + s.cues.length, bi + 1 + 2 * s.cues.length).map(x => x.c);
-    if (key(cues.slice().sort()) !== key(s.cues.slice().sort())) okS = false;
+    const prevs = arrS.slice(bi + 1, bi + 1 + capped.length);
+    if (!prevs.every((x, j) => x.type === "prev" && x.c === capped[j])) okS = false;
+    const cues = arrS.slice(bi + 1 + capped.length, bi + 1 + 2 * capped.length).map(x => x.c);
+    if (key(cues.slice().sort()) !== key(capped.slice().sort())) okS = false;
   });
   check(okS, "預習＋隨機並用 → prev 維持原順序、cues 集合不變");
 }
