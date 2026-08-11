@@ -95,6 +95,21 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   check(okS, "預習＋隨機並用 → prev 維持原順序、cues 集合不變");
 }
 
+// chain:true 句型：即使「隨機順序」開啟、cue 數（8）超過預設 cap（4），cues 仍保持原始固定順序不被抽樣/打亂
+// （第4課 sub[2] 是鏈式代換試點，8 個 cue 彼此接續，順序打亂或被抽樣會讓答案對不上「沿用上一句」的前提）
+{
+  const m = make({ checked: true, mode: "sub", lesson: 3 }); // 第4課
+  const arr = m.items();
+  const chainItem = arr.find(x => x.type === "base" && x.s.chain);
+  check(!!chainItem, "第4課含 chain:true 句型（鏈式代換試點）");
+  const chainS = chainItem.s;
+  check(chainS.cues.length > 4, "鏈式句型 cue 數超過預設 cap（4），足以測試抽樣是否被正確跳過");
+  const cuesInOrder = arr.filter(x => x.type === "cue" && x.s === chainS).map(x => x.c);
+  check(key(cuesInOrder) === key(chainS.cues), "chain 句型：隨機順序開啟＋cue數超過cap → cues 仍完整、原始順序");
+  const capM = m.subCapMap();
+  check(key(capM.get(chainS)) === key(chainS.cues), "chain 句型：subCapMap() 不抽樣，回傳完整原始 cues");
+}
+
 // listen / build 開著隨機也不受影響
 {
   const l = make({ checked: true, mode: "listen", lesson: 0 });

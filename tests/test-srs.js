@@ -59,6 +59,11 @@ check(r2 && r2.it.type === "cue" && r2.it.s === LESSONS[7].sub[1] && r2.it.c ===
 const r3 = srsResolve("qa|3|1");
 check(r3 && r3.it === LESSONS[3].qa[1], "qa 鍵還原到正確問答");
 check(srsResolve("listen|99|0") === null, "不存在的課 → null");
+{
+  const chainPi = LESSONS[3].sub.findIndex(s => s.chain);
+  check(chainPi >= 0, "第4課含 chain:true 句型可供測試");
+  check(srsResolve("sub|3|" + chainPi + "-0") === null, "chain 句型的舊/殘留 SRS 鍵 → 還原為 null（防內容改版後孤立cue被拉出複習）");
+}
 
 // items() 索引 → 鍵
 state.review = [{ key: "listen|5|2", src: "x", it: LESSONS[5].listen[2] }];
@@ -71,6 +76,8 @@ check(srsIdOf(0) === null, "sub 基本句 → 不排程");
 check(srsIdOf(1) === "sub|0|0-3", "sub 代換題 → 正確鍵");
 setItems([{ type: "prev", s: LESSONS[0].sub[0], c: LESSONS[0].sub[0].cues[0] }]);
 check(srsIdOf(0) === null, "sub 預習項 → 不排程");
+setItems([{ type: "cue", s: { chain: true, p: "x", base: ["b", "k", "c"], cues: [LESSONS[0].sub[0].cues[0]] }, c: LESSONS[0].sub[0].cues[0] }]);
+check(srsIdOf(0) === null, "sub 鏈式句型的 cue → 不排程（脫離鏈狀態無法單獨複習）");
 setItems([{ type: "base", s: LESSONS[0].sub[0] }, { type: "cue", s: LESSONS[0].sub[0], c: LESSONS[0].sub[0].cues[3] }]);
 state.lesson = -1;
 check(srsIdOf(1) === null, "自訂教材 → 不排程");
