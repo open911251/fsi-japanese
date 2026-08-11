@@ -9,8 +9,17 @@ const lEnd = script.lastIndexOf("];", script.indexOf("/* ================= 狀�
 const lessons = script.slice(script.indexOf("const LESSONS=["), lEnd + 2);
 const blk = script.slice(script.indexOf("/* ================= 今日條"), script.indexOf("/* ================= 初始化"));
 
-function makeEnv(preStore) {
-  return new Function("PRE", lessons + `
+// tdAdvice 只該讀取活動紀錄，完全不碰 exam 相關資料（使用者明確要求跟⑨綜合測驗分開）——
+// 只掃 tdAdvice 專屬區塊（不是整個 blk，blk 裡本來就合法包含 exam 完整實作），
+// 且只比對真的讀取（後面接 . 或 [），避免說明用途的註解文字（"完全不碰 examLog/..."）誤觸發
+const advBlk = script.slice(script.indexOf("/* ================= 今日建議"), script.indexOf("/* ================= 進度陪伴角色"));
+[/examLog[.\[]/, /examWeight[.\[]/, /examMastery[.\[]/, /examWin[.\[]/, /examSeen[.\[]/, /examPoolKeys\(/].forEach(p => {
+  if (p.test(advBlk)) throw new Error("tdAdvice 區塊不該讀取 exam 相關資料，但偵測到符合 " + p);
+});
+console.log("✅ tdAdvice 原始碼掃描：沒有讀取任何 exam 相關資料");
+
+function makeEnv(preStore, fetchImpl) {
+  return new Function("PRE", "FETCH_IMPL", lessons + `
     const mem=Object.assign({},PRE);
     const store={get:(k,d)=>k in mem?mem[k]:d,set:(k,v)=>{mem[k]=v;}};
     const els={};
@@ -18,12 +27,15 @@ function makeEnv(preStore) {
     const state={mode:"listen",lesson:0};
     let srs={},scores={};
     function switchMode(){}function runFrom(){}function fillLessons(){}function mpAsk(){}
+    function setStatus(id,msg){$(id).textContent=msg;}
+    const fetch = FETCH_IMPL || (()=>Promise.reject(new Error("no fetch configured")));
     ${blk}
     return {daily,streakD,markPractice,srsDueAll,lastPracticed,todayRender,els,plan,
             planAdvanceIfNewDay,planMastered,planRender,LESSONS,
             tdWeekNum,teacherRuleComment,teacherContext,WEEK_PLAN,
+            tdAdviceReady,tdAdviceGatherContext,tdAdviceCall,
             setSrs:o=>{srs=o;},setScores:o=>{scores=o;},mem};
-  `)(preStore || {});
+  `)(preStore || {}, fetchImpl);
 }
 
 let fails = 0;
@@ -127,5 +139,41 @@ const c1 = makeEnv({});
 const ctx = c1.teacherContext();
 check(ctx.includes(c1.LESSONS[0].t) && ctx.includes("到期複習"), "teacherContext 包含目前課名與到期複習數");
 
-console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
-process.exit(fails ? 1 : 0);
+// tdAdvice：今日建議（老師依活動紀錄給練習規劃，跟⑨綜合測驗完全分開）
+const a1 = makeEnv({});
+check(a1.tdAdviceReady() === false, "tdAdviceReady：未設定 llmUrl → false");
+a1.els.llmUrl = { value: "http://fake-llm" };
+check(a1.tdAdviceReady() === true, "tdAdviceReady：設定 llmUrl 後 → true");
+
+const a2 = makeEnv({ fsi_streak: JSON.stringify({ last: today, n: 5 }), fsi_daily: JSON.stringify({ day: today, drill: false, mp: false, rt: {} }) });
+a2.setSrs({ "listen|1|0": { b: 0, due: Date.now() - 1 } });
+a2.setScores({ 3: { sub: { best: 60 }, qa: { best: 90 } } });
+const actx = a2.tdAdviceGatherContext();
+check(actx.includes("連續練習 5 天"), "tdAdviceGatherContext：包含連續天數");
+check(actx.includes("到期複習"), "tdAdviceGatherContext：包含到期複習數");
+check(actx.includes("成績偏低") && actx.includes(a2.LESSONS[3].t.split(" ")[0]), "tdAdviceGatherContext：抓出成績<75%的課（用scores，不是examMastery）");
+check(actx.includes("今天聽辨還沒做"), "tdAdviceGatherContext：提醒聽辨還沒做");
+["examLog", "examWeight", "examMastery", "examWin", "examSeen"].forEach(k => {
+  check(!actx.includes(k), "tdAdviceGatherContext 輸出文字不含 " + k);
+});
+
+const a3 = makeEnv({}, () => Promise.resolve({ ok: true, json: () => Promise.resolve({ choices: [{ message: { content: "建議今天練第1課應答，10分鐘。" } }] }) }));
+a3.els.llmUrl = { value: "http://fake-llm" };
+a3.tdAdviceCall().then(() => {
+  check(a3.els.tdAdviceArea.textContent.includes("第1課應答"), "tdAdviceCall：成功時把LLM回應寫進 tdAdviceArea");
+  check(a3.els.tdAdviceStatus.textContent === "", "tdAdviceCall：成功後狀態列清空");
+
+  const a4 = makeEnv({}, () => Promise.reject(new Error("network down")));
+  a4.els.llmUrl = { value: "http://fake-llm" };
+  return a4.tdAdviceCall().then(() => {
+    check(a4.els.tdAdviceStatus.textContent.includes("連不上"), "tdAdviceCall：LLM失敗時狀態列顯示連不上，不拋例外");
+
+    const a5 = makeEnv({});
+    return a5.tdAdviceCall().then(() => {
+      check(a5.els.tdAdviceStatus.textContent.includes("尚未設定"), "tdAdviceCall：未設定llmUrl時明確提示尚未設定");
+
+      console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
+      process.exit(fails ? 1 : 0);
+    });
+  });
+});

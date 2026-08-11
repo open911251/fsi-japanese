@@ -134,6 +134,11 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <span id="tdLast"></span>
     <span id="tdMp"></span>
   </div>
+  <div class="row" style="margin-top:8px;align-items:center;gap:8px;">
+    <button id="tdAdviceBtn">📋 老師：今天學什麼？</button>
+    <span class="small" id="tdAdviceStatus"></span>
+  </div>
+  <div id="tdAdviceArea" class="small" style="margin-top:4px;white-space:pre-wrap;"></div>
   <div class="row small" style="margin-top:8px;gap:16px;flex-wrap:wrap;align-items:center;">
     今日：
     <span class="opt"><input type="checkbox" id="ckDrill" disabled> 操練</span>
@@ -2496,6 +2501,59 @@ function todayRender(){
   $("teacherCard").style.display="";
   tdWeekInfoRender();teacherWeekTableRender();teacherMaybeGreet();
 }
+
+/* ================= 今日建議（老師依活動紀錄給簡單練習規劃，跟⑩作業批改同一個固定身分、跟teacherChat人設脫鉤）
+   刻意只讀streakD/plan/srsDueAll/lastPracticed/scores/daily這些「今天該做什麼」既有訊號，完全不碰
+   examLog/examWeight/examMastery/examWin這些⑨綜合測驗的資料——那是給想自我挑戰、往下探索的人用的獨立功能，
+   使用者明確要求兩者分開，不要讓每日練習規劃被測驗表現影響、也不要讓這個功能反過來去動測驗的解鎖判斷。 */
+function tdAdviceReady(){return!!$("llmUrl").value.trim();}
+function tdAdviceSystemPrompt(){
+  return "你是一位認真、誠懇的日語母語教師，這次要做的是根據學生的練習紀錄，給出「今天該練什麼」的簡單建議——不是批改作業，是規劃練習內容。"+
+    "請具體說明：建議練哪一課（或哪幾課）、用哪個功能模式（聽讀／代換／應答／逐段累加／跟讀等）、大概練多久或幾題。"+
+    "如果有到期複習句，優先提醒清掉；如果有分數偏低的課，可以建議回去加強。語氣簡短溫和，像教練賽前提醒，不要長篇大論，控制在100字以內，不要條列超過3點。"+
+    "禁止建議「綜合測驗」或提到跨課測驗、解鎖進度——那是給想自我挑戰、往下探索的人用的獨立功能，跟今天的練習規劃無關，完全不要提。";
+}
+function tdAdviceGatherContext(){
+  const bits=[];
+  bits.push("連續練習 "+streakD.n+" 天，今天"+(daily.drill?"已經練過":"還沒開始練"));
+  const L=LESSONS[plan.lesson];
+  if(L)bits.push("目前排到「"+L.t+"」，第 "+plan.day+" 天（每課上限 "+PLAN_CAP+" 天）");
+  const d=srsDueAll();
+  if(d.tot)bits.push("到期複習 "+d.tot+" 句（"+Object.entries(d.by).filter(e=>e[1]>0).map(e=>TD_MODENAME[e[0]]+e[1]+"句").join("、")+"）");
+  const lp=lastPracticed();
+  if(lp&&LESSONS[lp.lesson])bits.push("上次練「"+LESSONS[lp.lesson].t.split(" ")[0]+"」"+TD_MODENAME[lp.mode]+"，成績"+lp.last+"%");
+  const weak=[];
+  Object.keys(scores).forEach(li=>{
+    const idx=parseInt(li,10);const L2=LESSONS[idx];if(!L2)return;
+    const vals=["sub","qa","build","trans"].map(m=>scores[li][m]&&scores[li][m].best).filter(x=>x!=null);
+    if(!vals.length)return;
+    const b=Math.min.apply(null,vals);
+    if(b<75)weak.push(L2.t.split(" ")[0]+"("+b+"%)");
+  });
+  if(weak.length)bits.push("成績偏低（<75%）的課："+weak.slice(0,5).join("、")+(weak.length>5?" 等":""));
+  if(!daily.mp)bits.push("今天聽辨還沒做");
+  const rt=daily.rt||{};
+  const undone=ROUTINE.filter(it=>!rt[it.key]).map(it=>it.label);
+  if(undone.length)bits.push("今日清單還沒打勾的項目："+undone.slice(0,4).join("、")+(undone.length>4?" 等":""));
+  return bits.join("；");
+}
+async function tdAdviceCall(){
+  if(!tdAdviceReady()){setStatus("tdAdviceStatus","尚未設定 LLM URL（本地 AI 設定）。");return;}
+  setStatus("tdAdviceStatus","⏳ 老師想一下…");
+  $("tdAdviceArea").textContent="";
+  const messages=[{role:"system",content:tdAdviceSystemPrompt()},{role:"user",content:tdAdviceGatherContext()}];
+  try{
+    const r=await fetch($("llmUrl").value.trim(),{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:$("llmModel").value.trim()||undefined,messages,stream:false})});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const reply=((await r.json()).choices[0].message.content||"").trim();
+    $("tdAdviceArea").textContent=reply;
+    setStatus("tdAdviceStatus","");
+  }catch(e){
+    setStatus("tdAdviceStatus","⚠ 連不上老師（隧道沒開？或伺服器未允許 CORS）");
+  }
+}
+$("tdAdviceBtn").onclick=tdAdviceCall;
 
 /* ================= 進度陪伴角色（人設／頭像使用者自填，不寫死進檔案；17週表僅背景參考） ================= */
 const WEEK_PLAN=[/* 2026-08-10課次重整後更新：課次編號本身已經對齊大家的日本語，不用再分「FSI課程／教科書課次」兩欄，
