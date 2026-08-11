@@ -172,6 +172,25 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   const gradableBad = env.examQaGradable({ variants: [{ a: "あちらです。" }, { a: "こちらです。" }] });
   check(gradableBad === false, "答案太像（近似同音異義詞級別） → 不可評分，排除");
 }
+
+// examQaGradable：Roadmap #33新增accept[]後，比對範圍要涵蓋每個變體的替代講法，不能只看正解本身
+{
+  const { env } = mkEnv(LESSONS3);
+  const okDespiteAccept = env.examQaGradable({
+    variants: [
+      { a: "あそこです。", accept: [["あそこですよ。"]] },
+      { a: "会議室です。" },
+    ],
+  });
+  check(okDespiteAccept === true, "變體正解跟另一變體的accept[]都不像 → 可評分");
+  const badBecauseAcceptCollides = env.examQaGradable({
+    variants: [
+      { a: "あちらです。" },
+      { a: "会議室です。", accept: [["こちらです。"]] }, // 變體B的替代講法碰巧撞上あちら/こちら這組已知高相似度組合（見上方驗證的0.8）
+    ],
+  });
+  check(badBecauseAcceptCollides === false, "變體B的accept[]替代講法跟變體A的正解太像 → 不可評分（不能只看正解，替代講法也要比對）");
+}
 {
   // 題池整合：把第2課（配圖變體格式）其中一個qa換成太像的變體組，應該被排除；另一個維持可評分
   const lessons = JSON.parse(JSON.stringify(LESSONS3));

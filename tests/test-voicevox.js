@@ -11,8 +11,8 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
 // 抽出 VOICEVOX 音高分析區塊（vvMoras／accentLabel／moraScore／circ）
 const blk = script.slice(script.indexOf("/* ================= VOICEVOX 音高分析"),
                           script.indexOf("/* ================= 正誤回饋"));
-const { vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned } = new Function(
-  blk + "; return {vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned};")();
+const { vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned, moraDurationAligned } = new Function(
+  blk + "; return {vvMoras, accentLabel, apWordLabel, moraScore, dtwPath, moraScoreAligned, moraDurationAligned};")();
 
 // ---- accentLabel：頭高／尾高／平板／中高／超出符號表的 fallback ----
 check(accentLabel(2, 1) === "頭高①", "2拍・核在1 → 頭高①");
@@ -138,6 +138,24 @@ const flat = moraScoreAligned(flatUser, flatRef, twoMoras);
 check(flat.every(s => s.close === true && s.match === true), "使用者曲線幾乎平：兩拍都貼門檻 → 標 ≈ 不判錯（防雜訊誤判）");
 check(moraScoreAligned(null, ref, twoMoras) === null, "缺使用者曲線 → null");
 check(moraScoreAligned(dragged, { C: ref.C, spans: [[0, 1]] }, twoMoras) === null, "spans 與拍數不符 → null（呼叫端退回比例對齊）");
+
+// ---- moraDurationAligned：拍長分析（Roadmap #34，缺陷分析#4——音高曲線比對抓不出長短音混淆但曲線恰好像的錯誤）----
+// 沿用上面「拖長第1拍到54%」這組既有fixture當校準基準：這是test-voicevox.js自己認定的「明顯有問題」案例，
+// 門檻（1.4/0.7）就是拿這組真實算出來的比例（第1拍1.65倍）校準的，不是憑空定的
+const durDragged = moraDurationAligned(dragged, ref, fourMoras);
+check(durDragged[0].flag === "長" && durDragged[0].ratio > 1.4, "拖長到54%的第1拍 → 拍長分析標「長」（比例" + durDragged[0].ratio + "）");
+check(durDragged[1].flag === null && durDragged[2].flag === null && durDragged[3].flag === null, "其餘被拖長效應波及的拍，比例沒到門檻 → 不誤標（DTW頻寬會攤平部分訊號，門檻抓的是明顯偏差不是微幅節奏差）");
+
+const durNormal = moraDurationAligned({ pts: refPts.slice() }, ref, fourMoras);
+check(durNormal.every(s => s.flag === null), "使用者節奏跟參考音完全一致 → 全部不標記（無假警報）");
+
+const shrunkUser = { pts: new Array(24).fill(0).map((_, i) => (i < 2 ? 3 : -3)) };
+const durShrunk = moraDurationAligned(shrunkUser, ref, fourMoras);
+check(durShrunk.some(s => s.flag === "短"), "壓縮到接近0時長的拍 → 拍長分析能標出「短」（驗證雙方向都能觸發，不是只能抓長不能抓短）");
+
+check(moraDurationAligned(null, ref, fourMoras) === null, "拍長分析：缺使用者曲線 → null");
+check(moraDurationAligned(dragged, { C: ref.C, spans: [[0, 1]] }, fourMoras) === null, "拍長分析：spans 與拍數不符 → null");
+check(moraDurationAligned(dragged, null, fourMoras) === null, "拍長分析：缺參考音（比例對齊退路時走這條）→ null，呼叫端(vvScore)要接受dur整體是null");
 
 console.log(fails ? `❌ ${fails} 項失敗` : "全部通過");
 process.exit(fails ? 1 : 0);

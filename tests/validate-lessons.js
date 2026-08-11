@@ -26,13 +26,22 @@ LESSONS.forEach((L, i) => {
   });
   if (!Array.isArray(L.qa)) bad(i, "qa 缺失");
   else L.qa.forEach((x, j) => {
+    const checkAccept = (accept, label) => {
+      if (accept === undefined) return;
+      if (!Array.isArray(accept)) { bad(i, `${label}.accept 必須是陣列`); return; }
+      accept.forEach((a, k) => { if (!Array.isArray(a) || a.length !== 2 || typeof a[0] !== "string" || typeof a[1] !== "string") bad(i, `${label}.accept[${k}] 格式不對（需 [替代答案, 替代假名]）`); });
+    };
     if (Array.isArray(x)) { if (x.length !== 5) bad(i, `qa[${j}] 欄位數 ${x.length}≠5`); }
     else if (x && Array.isArray(x.variants)) {
-      // 配圖題新格式（Roadmap #21）：{q,qk,variants:[{img,a,ak,cn},...]}，隨機選一個變體出題
+      // 配圖題新格式（Roadmap #21）：{q,qk,variants:[{img,a,ak,cn,accept?},...]}，隨機選一個變體出題
       if (typeof x.q !== "string" || typeof x.qk !== "string") bad(i, `qa[${j}] 缺 q/qk`);
       if (!x.variants.length) bad(i, `qa[${j}].variants 不能是空陣列`);
-      x.variants.forEach((v, k) => { if (!v || typeof v.img !== "string" || typeof v.a !== "string" || typeof v.ak !== "string" || typeof v.cn !== "string") bad(i, `qa[${j}].variants[${k}] 欄位缺失（需 img/a/ak/cn）`); });
-    } else bad(i, `qa[${j}] 格式不對（非5欄陣列，也非 {q,qk,variants} 物件）`);
+      x.variants.forEach((v, k) => { if (!v || typeof v.img !== "string" || typeof v.a !== "string" || typeof v.ak !== "string" || typeof v.cn !== "string") bad(i, `qa[${j}].variants[${k}] 欄位缺失（需 img/a/ak/cn）`); checkAccept(v.accept, `qa[${j}].variants[${k}]`); });
+    } else if (x && typeof x.q === "string" && typeof x.a === "string") {
+      // 無配圖但有替代答案格式（Roadmap #33）：{q,qk,a,ak,cn,accept:[[altA,altAk],...]}，答案本身沒有邏輯歧義但容許多種合法講法
+      if (typeof x.qk !== "string" || typeof x.a !== "string" || typeof x.ak !== "string" || typeof x.cn !== "string") bad(i, `qa[${j}] 缺欄位（需 q/qk/a/ak/cn）`);
+      checkAccept(x.accept, `qa[${j}]`);
+    } else bad(i, `qa[${j}] 格式不對（非5欄陣列、非 {q,qk,variants} 物件、也非 {q,qk,a,ak,cn,accept} 物件）`);
   });
   if (L.trans) L.trans.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `trans[${j}] 欄位數 ${x.length}≠5`); });
   if (!L.build || !Array.isArray(L.build.full) || L.build.full.length !== 3) bad(i, "build.full 欄位數 ≠3");
