@@ -18,6 +18,15 @@ const make = new Function("OPTS", lessons + `
   ${blk}
   return {items,itemsRaw,bump:()=>{shufSeed++;},state,subCapMap};
 `);
+// chain:true 測試用合成教材（不依賴特定課次一定有鏈式句型——鏈式目前只是機制，是否/在哪一課使用是內容編輯決定，
+// 教材本身隨時可能改版，測試不該綁死在「第4課」這個會過時的假設上，見2026-08-12 L4改回獨立多值後這裡才真的踩到雷）
+const makeSyn = (OPTS, synLessons) => new Function("OPTS", "LESSONS", `
+  const $=id=>({checked:id==="prevChk"?!!OPTS.preview:OPTS.checked});
+  const state={mode:OPTS.mode,lesson:OPTS.lesson,idx:0,review:[]};
+  function curLesson(){return LESSONS[state.lesson];}
+  ${blk}
+  return {items,itemsRaw,bump:()=>{shufSeed++;},state,subCapMap};
+`)(OPTS, synLessons);
 
 const key = x => JSON.stringify(x);
 let fails = 0;
@@ -95,15 +104,26 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   check(okS, "預習＋隨機並用 → prev 維持原順序、cues 集合不變");
 }
 
-// chain:true 句型：即使「隨機順序」開啟、cue 數（8）超過預設 cap（4），cues 仍保持原始固定順序不被抽樣/打亂
-// （第4課 sub[2] 是鏈式代換試點，8 個 cue 彼此接續，順序打亂或被抽樣會讓答案對不上「沿用上一句」的前提）
+// chain:true 句型：即使「隨機順序」開啟、cue 數超過 cap，cues 仍保持原始固定順序不被抽樣/打亂
+// （鏈式代換的cue彼此接續，順序打亂或被抽樣會讓答案對不上「沿用上一句」的前提。用合成教材測，不綁死在
+// 特定課次——鏈式目前只是機制，實際用在哪一課是內容編輯決定，教材隨時可能改版，2026-08-12 L4從鏈式改回
+// 獨立多值後這裡就踩到雷，測試不該依賴會過時的內容假設）
 {
-  const m = make({ checked: true, mode: "sub", lesson: 3 }); // 第4課
+  const synLessons = [{
+    t: "測試課", g: "", listen: [], qa: [], build: null,
+    sub: [{
+      p: "測試鏈式句型",
+      chain: true,
+      base: ["base句", "basek", "basecn"],
+      cues: [1, 2, 3, 4, 5, 6, 7, 8].map(n => ["cue" + n, "ans" + n, "ansk" + n, "cn" + n]),
+    }],
+  }];
+  const m = makeSyn({ checked: true, mode: "sub", lesson: 0 }, synLessons);
   const arr = m.items();
   const chainItem = arr.find(x => x.type === "base" && x.s.chain);
-  check(!!chainItem, "第4課含 chain:true 句型（鏈式代換試點）");
+  check(!!chainItem, "合成教材的 chain:true 句型能被 items() 正確枚舉");
   const chainS = chainItem.s;
-  check(chainS.cues.length > 4, "鏈式句型 cue 數超過預設 cap（4），足以測試抽樣是否被正確跳過");
+  check(chainS.cues.length > 4, "鏈式句型 cue 數（8）超過預設 cap（4），足以測試抽樣是否被正確跳過");
   const cuesInOrder = arr.filter(x => x.type === "cue" && x.s === chainS).map(x => x.c);
   check(key(cuesInOrder) === key(chainS.cues), "chain 句型：隨機順序開啟＋cue數超過cap → cues 仍完整、原始順序");
   const capM = m.subCapMap();

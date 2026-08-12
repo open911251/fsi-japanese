@@ -60,9 +60,13 @@ const r3 = srsResolve("qa|3|1");
 check(r3 && r3.it === LESSONS[3].qa[1], "qa 鍵還原到正確問答");
 check(srsResolve("listen|99|0") === null, "不存在的課 → null");
 {
-  const chainPi = LESSONS[3].sub.findIndex(s => s.chain);
-  check(chainPi >= 0, "第4課含 chain:true 句型可供測試");
+  // 鏈式代換目前只是機制，實際內容用在哪一課是編輯決定、教材隨時可能改版（2026-08-12 L4本身就從鏈式改回獨立
+  // 多值了），測試不該綁死在特定課次一定有chain內容這個假設上——臨時把一個既有句型標記成chain來測，用完立刻還原
+  const chainPi = 0;
+  const origChain = LESSONS[3].sub[chainPi].chain;
+  LESSONS[3].sub[chainPi].chain = true;
   check(srsResolve("sub|3|" + chainPi + "-0") === null, "chain 句型的舊/殘留 SRS 鍵 → 還原為 null（防內容改版後孤立cue被拉出複習）");
+  LESSONS[3].sub[chainPi].chain = origChain;
 }
 
 // items() 索引 → 鍵
