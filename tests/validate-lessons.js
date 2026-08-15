@@ -44,10 +44,13 @@ LESSONS.forEach((L, i) => {
     } else bad(i, `qa[${j}] 格式不對（非5欄陣列、非 {q,qk,variants} 物件、也非 {q,qk,a,ak,cn,accept} 物件）`);
   });
   if (L.trans) L.trans.forEach((x, j) => { if (!Array.isArray(x) || x.length !== 5) bad(i, `trans[${j}] 欄位數 ${x.length}≠5`); });
-  if (!L.build || !Array.isArray(L.build.full) || L.build.full.length !== 3) bad(i, "build.full 欄位數 ≠3");
-  else if (!Array.isArray(L.build.parts) || L.build.parts.some(p => typeof p !== "string")) bad(i, "build.parts 非字串陣列");
+  if (!Array.isArray(L.build) || !L.build.length) bad(i, "build 缺失或空陣列");
+  else L.build.forEach((b, j) => {
+    if (!b || !Array.isArray(b.full) || b.full.length !== 3) bad(i, `build[${j}].full 欄位數 ≠3`);
+    if (!b || !Array.isArray(b.parts) || b.parts.some(p => typeof p !== "string")) bad(i, `build[${j}].parts 非字串陣列`);
+  });
 });
 
-const n = LESSONS.reduce((a, L) => a + L.listen.length + L.qa.length + L.sub.reduce((b, s2) => b + 1 + s2.cues.length, 0) + 1, 0);
+const n = LESSONS.reduce((a, L) => a + L.listen.length + L.qa.length + L.sub.reduce((b, s2) => b + 1 + s2.cues.length, 0) + (Array.isArray(L.build) ? L.build.length : 0), 0);
 console.log(`共 ${LESSONS.length} 課、約 ${n} 個操練項目；錯誤 ${errors} 筆${errors ? "" : "，格式全數通過 ✅"}`);
 process.exit(errors ? 1 : 0);
