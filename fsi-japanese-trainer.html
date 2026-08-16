@@ -60,12 +60,12 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 .wktable td,.wktable th{border:1px solid var(--line);padding:4px 8px;text-align:left;}
 .wktable tr.wkNow{background:#fdf3ef;}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-@media(max-width:600px){.grid2{grid-template-columns:1fr;}.jp{font-size:1.35rem;}}
+@media(max-width:600px){.grid2{grid-template-columns:1fr;}.jp{font-size:1.35rem;}select,input[type=text],input[type=password],textarea{font-size:1rem;}}
 </style>
 </head>
 <body>
 <h1>FSI 日語訓練工具 <span class="pill">聽 → 說 → 反覆操練</span></h1>
-<div class="tag">FSI 口語操練法：先聽不看字、跟讀、代換、應答、逐段累加。搭配 Google Cloud TTS 日語語音。</div>
+<div class="tag">FSI 口語操練法：先聽不看字、跟讀、代換、應答、逐段累加、轉換——這6個是核心操練，其餘分頁（錄音對比、聽辨、影子跟讀、角色扮演、綜合測驗、作業批改）是進階或選用功能，練熟核心操練後再摸索也可以。搭配 Google Cloud TTS 日語語音，沒填 API Key 則用瀏覽器內建語音。</div>
 
 <div class="card" id="teacherCard" style="display:none;">
   <div class="row" style="align-items:center;gap:8px;">
@@ -135,7 +135,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <span id="tdMp"></span>
   </div>
   <div class="row" style="margin-top:8px;align-items:center;gap:8px;">
-    <button id="tdAdviceBtn">📋 老師：今天學什麼？</button>
+    <button id="tdAdviceBtn">📋 母語教師：今天學什麼？</button>
     <span class="small" id="tdAdviceStatus"></span>
   </div>
   <div id="tdAdviceArea" class="small" style="margin-top:4px;white-space:pre-wrap;"></div>
@@ -204,7 +204,19 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
       填了 VOICEVOX 後，腔調回饋會多一排逐拍高低標註（比對音高曲線更準的符號級評分，取自 VOICEVOX 對句子的重音分析），跟唱與錄音對比的畫布也會疊一條理論高低軌。沒填就照舊只有曲線比對。
     </div>
   </details>
+  <details><summary>學習進度備份</summary>
+    <div class="row" style="margin-top:8px;">
+      <button id="progExportBtn">⬇ 匯出進度</button>
+      <button id="progImportBtn">⬆ 匯入進度</button>
+      <input type="file" id="progImportFile" accept=".json" style="display:none;">
+    </div>
+    <div class="small" style="margin-top:6px;line-height:1.7;">
+      進度全部存在這台瀏覽器的 localStorage，換裝置、清瀏覽器資料、換瀏覽器都會全部歸零，且不會事先警告你。匯出會打包連續天數／間隔複習排程／各項成績／自訂教材／角色設定與對話紀錄等（不含 API Key／伺服器網址這些憑證設定），存成一個 JSON 檔；匯入會覆蓋目前這台瀏覽器的對應資料。<b>匯出檔內含你跟 AI 的對話紀錄和自訂頭像，分享出去前請留意。</b>
+    </div>
+    <div class="small" id="progStatus" style="margin-top:4px;"></div>
+  </details>
   <div class="status" id="ttsStatus"></div>
+  <div class="small" id="ttsSourceBadge"></div>
 </div>
 
 <div class="card">
@@ -230,6 +242,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 </div>
 
 <div class="card" id="drillCard">
+  <div id="drillDesc" style="margin-bottom:8px;"><b></b> <span class="small"></span></div>
   <div class="progress" id="prog"></div>
   <div class="bar"><div id="barFill"></div></div>
   <div id="stage">
@@ -392,7 +405,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 </div>
 
 <div class="card" id="examCard" style="display:none;">
-  <b>綜合測驗</b>　<span class="small">跨課隨機抽考已練過的句型，範圍隨你的表現自動往後推（需先在「本地 AI 設定」填 STT URL）</span>
+  <b>綜合測驗</b>　<span class="small">跨課隨機抽考已練過的句型，範圍隨你的表現自動往後推。答對答錯只影響格子顏色跟解鎖進度，不顯示分數（需先在「本地 AI 設定」填 STT URL）</span>
   <div class="examLegend">
     <div><span class="sw masteryLocked"></span>未解鎖</div>
     <div><span class="sw mastery0"></span>剛解鎖</div>
@@ -417,7 +430,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 </div>
 
 <div class="card" id="homeworkCard" style="display:none;">
-  <b>📮 作業（老師批改）</b>　<span class="small">做5題應答練習，做完一次繳交。老師（LLM）批改文法/用詞，腔調另外用既有的分析管線，不打分數——這是作業講評，不是考試（需先在「本地 AI 設定」填 LLM URL）</span>
+  <b>📮 作業（母語教師批改）</b>　<span class="small">做5題應答練習，做完一次繳交。母語教師（LLM）批改文法/用詞，腔調另外用既有的分析管線，不打分數——這是作業講評，不是考試。批改結果只存在這次頁面，重新整理會消失，建議看完就複製下來（需先在「本地 AI 設定」填 LLM URL）</span>
   <div id="hwSelectArea" style="margin-top:10px;">
     <button class="primary" id="hwStartBtn">🎲 抽5題開始</button>
   </div>
@@ -540,7 +553,12 @@ const store={get(k,d){try{return localStorage.getItem(k)??d;}catch(e){return d;}
 })();
 let state={mode:"listen",lesson:0,idx:0,running:false,runId:0,customLesson:null,review:[]};
 const audioCache=new Map();
-let currentAudio=null,ttsWarned=false;
+let currentAudio=null,ttsWarned=false,ttsSource=null;
+function ttsSourceUpdate(src){
+  ttsSource=src;
+  const el=$("ttsSourceBadge");
+  if(el)el.textContent=src==="cloud"?"🔊 目前語音來源：Cloud TTS":"🔈 目前語音來源：瀏覽器內建語音（非 Cloud TTS，音質較低，可在上方填 API Key 升級）";
+}
 /* 錄音共用設定：關掉瀏覽器預設的雜訊抑制／自動增益（那兩個是「悶」「忽大忽小」的常見成因），
    保留回音消除；MediaRecorder 明示位元率，避免瀏覽器預設低位元率造成破音／悶。 */
 const MIC_CONSTRAINTS={audio:{echoCancellation:true,noiseSuppression:false,autoGainControl:false,channelCount:1}};
@@ -595,11 +613,12 @@ function speakBrowser(text){
 async function say(text){
   const key=$("apiKey").value.trim();
   if(key){
-    try{const url=await synthCloud(text);await playUrl(url);return;}
+    try{const url=await synthCloud(text);await playUrl(url);ttsSourceUpdate("cloud");return;}
     catch(err){
       if(!ttsWarned){setStatus("ttsStatus","⚠ Cloud TTS 失敗（"+err.message+"），改用瀏覽器語音");ttsWarned=true;}
     }
   }
+  ttsSourceUpdate("browser");
   await speakBrowser(text);
 }
 function stopAudio(){
@@ -1372,7 +1391,7 @@ async function toggleRec(){
     mediaRec.onstop=()=>{
       stream.getTracks().forEach(t=>t.stop());
       if(myRecUrl)URL.revokeObjectURL(myRecUrl);
-      myRecUrl=URL.createObjectURL(new Blob(recChunks,{type:"audio/webm"}));
+      myRecUrl=URL.createObjectURL(new Blob(recChunks,{type:mediaRec.mimeType||"audio/webm"}));
       $("recPlay").disabled=false;$("recAB").disabled=false;$("recAnalyze").disabled=false;$("recSlowMine").disabled=false;
       recording=false;$("recBtn").innerHTML="🔴 錄音";
       setStatus("recStatus","錄好了！按「連續對比」聽示範→自己的發音差異。");
@@ -1593,6 +1612,8 @@ function switchMode(m){
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
     setStatus("drillStatus",empty?"":modeName());
+    const[dTitle,dDesc]=modeName().split("：");
+    $("drillDesc").innerHTML="<b>"+dTitle+"</b> <span class=\"small\">"+(dDesc||"")+"</span>";
     updateProg();
   }
 }
@@ -1709,6 +1730,44 @@ $("wsTest").onclick=async()=>{/* 一鍵檢查三個工作站端點；隧道沒�
   }
   $("wsStatus").innerHTML=out.join("<br>");
 };
+/* 進度匯出/匯入：只掃 fsi_ 開頭的鍵（含shadow跟讀那種帶課號/小節動態組成的鍵，不寫死清單），
+   排除憑證/端點設定（不該被分享出去）跟 fsi_lessons_n（課次版本標記——匯入時故意不覆蓋這個鍵，
+   避免覆蓋成舊版本號後，下次重新整理頁面時觸發課次版本檢查IIFE，把剛匯入的fsi_score/fsi_srs等
+   課次索引鍵當成「版本不符的殘影」自動清空，等於匯入完自己把自己吃掉）。 */
+const PROG_CRED_KEYS=["fsi_gtts_key","fsi_llm_url","fsi_llm_model","fsi_stt_url","fsi_stt_model","fsi_vv_url","fsi_vv_speaker"];
+function progExport(){
+  const data={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith("fsi_")&&k!=="fsi_lessons_n"&&!PROG_CRED_KEYS.includes(k))data[k]=localStorage.getItem(k);
+  }
+  const payload={meta:{version:1,exportedAt:new Date().toISOString(),lessonsN:LESSONS.length},data};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="fsi-progress-"+new Date().toISOString().slice(0,10)+".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus("progStatus","已匯出 ✓");
+}
+function progImport(file){
+  const reader=new FileReader();
+  reader.onload=()=>{
+    let payload;
+    try{payload=JSON.parse(reader.result);}catch(e){setStatus("progStatus","⚠ 檔案格式不對，不是有效的 JSON");return;}
+    if(!payload||typeof payload.data!=="object"){setStatus("progStatus","⚠ 檔案格式不對，缺少 data 欄位");return;}
+    const lessonsN=payload.meta&&payload.meta.lessonsN;
+    if(lessonsN!=null&&String(lessonsN)!==String(LESSONS.length)){
+      if(!confirm("這份備份是在「"+lessonsN+"課」版本的教材匯出的，目前是「"+LESSONS.length+"課」，課次結構可能不同——成績/複習排程/測驗解鎖進度可能對不上號。仍要匯入嗎？"))return;
+    }
+    Object.keys(payload.data).forEach(k=>{if(k.startsWith("fsi_")&&k!=="fsi_lessons_n")store.set(k,payload.data[k]);});
+    setStatus("progStatus","已匯入 ✓　請重新整理頁面套用");
+  };
+  reader.readAsText(file);
+}
+$("progExportBtn").onclick=progExport;
+$("progImportBtn").onclick=()=>$("progImportFile").click();
+$("progImportFile").onchange=e=>{if(e.target.files[0])progImport(e.target.files[0]);e.target.value="";};
 $("prevChk").onchange=()=>{stopRun();state.idx=0;store.set("fsi_preview",$("prevChk").checked?"1":"0");updateProg();};
 $("subCapInput").onchange=()=>{stopRun();state.idx=0;subCapSeed++;store.set("fsi_subcap",$("subCapInput").value);updateProg();};
 $("fbChk").onchange=async()=>{
@@ -2331,7 +2390,7 @@ async function shadowToggleRec(){
     shadowMediaRec.onstop=()=>{
       stream.getTracks().forEach(t=>t.stop());
       if(shadowMyUrl)URL.revokeObjectURL(shadowMyUrl);
-      shadowMyUrl=URL.createObjectURL(new Blob(shadowRecChunks,{type:"audio/webm"}));
+      shadowMyUrl=URL.createObjectURL(new Blob(shadowRecChunks,{type:shadowMediaRec.mimeType||"audio/webm"}));
       $("shadowPlayMine").disabled=false;$("shadowAB").disabled=false;$("shadowDuet").disabled=false;shadowUpdateAnalyzeEnabled();
       shadowRecording=false;$("shadowRecBtn").innerHTML="🎙 跟讀（播放＋錄音）";
       setStatus("shadowStatus","錄好了，按「聽自己」回放，或「連續對比」交叉聽。");
@@ -2623,7 +2682,7 @@ function tdAdviceGatherContext(){
 }
 async function tdAdviceCall(){
   if(!tdAdviceReady()){setStatus("tdAdviceStatus","尚未設定 LLM URL（本地 AI 設定）。");return;}
-  setStatus("tdAdviceStatus","⏳ 老師想一下…");
+  setStatus("tdAdviceStatus","⏳ 母語教師想一下…");
   $("tdAdviceArea").textContent="";
   const messages=[{role:"system",content:tdAdviceSystemPrompt()},{role:"user",content:tdAdviceGatherContext()}];
   try{
@@ -2634,7 +2693,7 @@ async function tdAdviceCall(){
     $("tdAdviceArea").textContent=reply;
     setStatus("tdAdviceStatus","");
   }catch(e){
-    setStatus("tdAdviceStatus","⚠ 連不上老師（隧道沒開？或伺服器未允許 CORS）");
+    setStatus("tdAdviceStatus","⚠ 連不上母語教師（隧道沒開？或伺服器未允許 CORS）");
   }
 }
 $("tdAdviceBtn").onclick=tdAdviceCall;
@@ -2929,7 +2988,7 @@ async function hwSubmit(){
     hwRenderResults();
   }catch(e){
     if(hwState!==hw||hw.runId!==runId)return;
-    hw.gradeError="⚠ 連不上老師（隧道沒開？或伺服器未允許 CORS）——腔調分析結果已顯示，文法講評可按「重新送出」再試一次。";
+    hw.gradeError="⚠ 連不上母語教師（隧道沒開？或伺服器未允許 CORS）——腔調分析結果已顯示，文法講評可按「重新送出」再試一次。";
     hwRenderResults();
   }
 }
@@ -2964,9 +3023,10 @@ function hwRenderResults(){
           '<div id="hwMora'+i+'" style="margin-top:2px;"></div>':"")+
       '</div>';
   }).join("");
-  const summary=(hw.result&&hw.result.summary)?'<div class="card" style="margin-top:8px;"><b>📮 老師總評</b><div style="white-space:pre-wrap;margin-top:4px;">'+teacherEsc(hw.result.summary)+'</div></div>':"";
+  const summary=(hw.result&&hw.result.summary)?'<div class="card" style="margin-top:8px;"><b>📮 母語教師總評</b> <button id="hwCopyBtn" style="margin-left:6px;">📋 複製</button><div style="white-space:pre-wrap;margin-top:4px;">'+teacherEsc(hw.result.summary)+'</div></div>':"";
   const err=hw.gradeError?('<div class="status">'+teacherEsc(hw.gradeError)+'</div><div class="row"><button id="hwRetryBtn">🔁 重新送出</button></div>'):"";
   $("hwResultList").innerHTML=html+summary+err;
+  if($("hwCopyBtn"))$("hwCopyBtn").onclick=hwCopySummary;
   hw.items.forEach((it,i)=>{
     const a=hw.answers[i];
     if(a&&a.pitchResult&&$("hwCv"+i)){
@@ -2975,6 +3035,12 @@ function hwRenderResults(){
     }
   });
   if($("hwRetryBtn"))$("hwRetryBtn").onclick=hwRetryGrade;
+}
+function hwCopySummary(){
+  const hw=hwState;if(!hw||!hw.result)return;
+  const text=hw.items.map((it,i)=>"第"+(i+1)+"題　"+it.q+(hw.result.perItem[i]?"\n"+hw.result.perItem[i]:"")).join("\n\n")+
+    (hw.result.summary?"\n\n總評\n"+hw.result.summary:"");
+  navigator.clipboard.writeText(text).then(()=>setStatus("hwStatus","已複製到剪貼簿 ✓")).catch(()=>setStatus("hwStatus","複製失敗，請手動選取文字複製。"));
 }
 function hwNewBatch(){
   hwStop();hwState=null;
@@ -3108,7 +3174,7 @@ async function rpExtFinish(){
   $("rpInput").disabled=true;$("rpSendBtn").disabled=true;$("rpExtStopBtn").style.display="none";$("rpCue").textContent="";
   if(!rpExtLog.some(e=>e.role==="user")){$("rpStatus").textContent="延伸對話結束（沒有作答內容，略過講評）。按「開始」重來。";return;}
   if(!rpReady()){$("rpStatus").textContent="延伸對話結束。（尚未設定LLM URL，略過質性講評）按「開始」重來。";return;}
-  $("rpStatus").textContent="延伸對話結束，老師講評中…";
+  $("rpStatus").textContent="延伸對話結束，母語教師講評中…";
   try{
     const convText=rpExtLog.map(e=>(e.role==="ai"?"AI：":"你：")+e.text).join("\n");
     /* 講評身分刻意跟角色扮演本身的system（朋友/上司/客戶等角色人設）脫鉤，比照hwSystemPrompt()／tdAdviceSystemPrompt()
@@ -3117,7 +3183,7 @@ async function rpExtFinish(){
       {role:"system",content:"あなたは真面目で誠実な日本語ネイティブ教師です。点数はつけず、文法や表現についての質的なアドバイスだけをします。"},
       {role:"user",content:"以下は日本語学習者のロールプレイ延伸会話です（採点はしません）：\n\n"+convText+"\n\n学習者の発言について、文法・自然さ・話がかみ合っているかを中心に、簡潔に講評してください。"}
     ]);
-    $("rpStatus").innerHTML="延伸對話結束。<br>📋 老師講評：<br>"+teacherEsc(rpExtReview);
+    $("rpStatus").innerHTML="延伸對話結束。<br>📋 母語教師講評：<br>"+teacherEsc(rpExtReview);
   }catch(e){
     rpExtReviewError=e.message;
     $("rpStatus").textContent="延伸對話結束，但講評連不上："+e.message;
