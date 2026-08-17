@@ -54,11 +54,11 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   check(keys.filter(k => k.indexOf("trans|") === 0).length === 1, "trans 題共1個（只有第0課有）");
 }
 {
-  // 配圖變體格式的qa，課程一旦解鎖就應該進題池（這是本次新加的行為：解決qa可測驗性問題後把它放回題庫）
+  // qa題目（含配圖變體格式）暫時全數擱置不進題池，2026-08-18因配圖品質問題退回排除狀態
   const { env } = mkEnv(LESSONS3);
   env.examWin.u.push(2);
   const keys = env.examPoolKeys();
-  check(keys.indexOf(env.examKey("qa", 2, 0)) >= 0, "配圖變體格式的qa在課程解鎖後會進題池");
+  check(keys.indexOf(env.examKey("qa", 2, 0)) === -1, "配圖變體格式的qa暫時擱置，不進題池");
 }
 
 // examPick 加權：答錯率高的 key 應更常被抽到
@@ -198,8 +198,8 @@ const check = (cond, msg) => { console.log((cond ? "✅ " : "❌ ") + msg); if (
   const { env } = mkEnv(lessons);
   env.examWin.u.push(2);
   const keys = env.examPoolKeys();
-  check(keys.indexOf(env.examKey("qa", 2, 0)) >= 0, "答案可區分的配圖qa（原本那題）仍在題池");
-  check(keys.indexOf(env.examKey("qa", 2, 1)) === -1, "答案太像的配圖qa（新加的あちら/こちら組）被排除出題池");
+  check(keys.indexOf(env.examKey("qa", 2, 0)) === -1, "qa暫時擱置：答案可區分的配圖qa也不在題池（不是因為相似度，是qa整體被排除）");
+  check(keys.indexOf(env.examKey("qa", 2, 1)) === -1, "答案太像的配圖qa（あちら/こちら組）同樣不在題池");
 }
 
 // examPick 單輪不重複：exclude集合排除已抽過的key，池子排完才解禁重複

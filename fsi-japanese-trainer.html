@@ -1185,7 +1185,7 @@ function itemsRaw(){
   const L=curLesson();if(!L)return[];
   if(state.mode==="listen")return L.listen;
   if(state.mode==="sub"){const map=subCapMap();const arr=[];L.sub.forEach(s=>{const cues=map.get(s);arr.push({type:"base",s});if($("prevChk").checked)cues.forEach(c=>arr.push({type:"prev",s,c}));cues.forEach(c=>arr.push({type:"cue",s,c}));});return arr;}
-  if(state.mode==="qa")return L.qa;
+  if(state.mode==="qa")return L.qa.filter(it=>!(it&&!Array.isArray(it)&&it.variants));/* 配圖變體題暫時擱置（品質問題待修），③応答練習不出這批題；資料原封不動留在LESSONS，images/也不動，之後要復用只要拿掉這行filter */
   if(state.mode==="trans")return L.trans||[];
   if(state.mode==="build"){const groups=L.build;if(!groups)return[];const arr=[];groups.forEach(b=>b.parts.forEach((p,i)=>arr.push({p,last:i===b.parts.length-1,b})));return arr;}
   return[];
@@ -2037,7 +2037,7 @@ function examPoolKeys(){/* qa 只收有配圖變體的題目（{q,qk,variants} �
     const L=LESSONS[li];
     for(let pi=0;pi<examPatternCount(li);pi++)out.push(examKey("sub",li,pi));
     for(let ti=0;ti<examTransCount(li);ti++)out.push(examKey("trans",li,ti));
-    if(L&&L.qa)L.qa.forEach((it,qi)=>{if(!Array.isArray(it)&&examQaGradable(it))out.push(examKey("qa",li,qi));});
+    /* qa題目暫時全數擱置不進題庫：配圖變體格式品質問題待修（見itemsRaw()同款註解）；accept-only格式（無圖但有替代講法）答案一樣是編出來的劇本事實，跟被排除的純文字5欄格式是同一個「答不出來」問題，混進來也不合理——且會讓examQaGradable()因缺少variants欄位噴錯，一併排除。sub/trans不受影響。 */
   });
   return out;
 }
