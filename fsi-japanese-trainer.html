@@ -5,67 +5,171 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FSI 日語訓練工具</title>
 <style>
-:root{--bg:#f5f4ef;--card:#fff;--ink:#1a1a1a;--sub:#6b6b6b;--accent:#c04a2b;--accent2:#2b6cb0;--line:#e2ded5;--ok:#2f855a;}
+:root{
+  --bg:#f6f4ef;--card:#fff;--card-alt:#faf6ef;--ink:#1a1a1a;--sub:#83796e;
+  --accent:#b8452a;--accent-soft:#f1d9cd;--accent2:#2b6cb0;--line:#e2ded5;--ok:#2f855a;
+  --chip:rgba(0,0,0,.045);
+  --m0:#e5e0d5;--m1:#e8b9a0;--m2:#d3703f;--m3:#a83a1f;--mLocked:#eae7df;
+  --mono:"SF Mono","Cascadia Mono",Consolas,monospace;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#151311;--card:#292319;--card-alt:#302a1f;--ink:#ede8df;--sub:#a89f92;
+    --accent:#e0693f;--accent-soft:#3d2a20;--accent2:#7fb0e0;--line:#3a352c;--ok:#4caf7d;
+    --chip:rgba(255,255,255,.07);
+    --m0:#3a352c;--m1:#6b4232;--m2:#a8552c;--m3:#e0693f;--mLocked:#2a251e;
+  }
+}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:"Noto Sans TC","Noto Sans JP","Hiragino Sans","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);padding:16px;max-width:920px;margin:0 auto;}
-h1{font-size:1.3rem;margin-bottom:4px;}
+body{font-family:"Noto Sans TC","Noto Sans JP","Hiragino Sans","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);}
+h1{font-size:1.15rem;}
+.app-shell{display:flex;flex-direction:column;min-height:100vh;}
+.app-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line);}
+.app-body{display:flex;flex:1;align-items:flex-start;}
+.app-sidebar{width:210px;flex:none;padding:16px 10px;border-right:1px solid var(--line);position:sticky;top:49px;align-self:flex-start;max-height:calc(100vh - 49px);overflow-y:auto;}
+.nav-group{margin-bottom:16px;}
+.nav-label{font-size:.68rem;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;padding:0 10px;margin-bottom:6px;font-family:var(--mono);}
+.app-sidebar button{display:block;width:100%;text-align:left;border:1px solid transparent;background:transparent;padding:8px 10px;border-radius:6px;margin-bottom:2px;font-size:.86rem;color:var(--ink);}
+.app-sidebar button:hover{border-color:var(--line);}
+.app-sidebar button.active{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+.app-main{flex:1;min-width:0;padding:20px;max-width:980px;margin:0 auto;width:100%;}
+.tagDetails{margin-bottom:10px;}
+.tagDetails summary{font-size:.82rem;}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--sub);}
+button.secondary{background:var(--card-alt);font-weight:600;}
+.drillDesc{font-size:.8rem;color:var(--sub);margin-bottom:8px;}
+#todayCard{background:var(--card-alt);border-color:var(--accent-soft);}
+#todayCard #tdStreak{font-size:1.15rem;}
+#todayCard button{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;}
+#teacherCard{font-size:.92rem;}
+#teacherCard>.row>b{font-size:.95rem;}
+#stage{text-align:center;padding:20px 0 8px;}
+.drillControls{justify-content:center;}
+.workspace-section{margin-top:14px;padding-top:10px;border-top:1px dashed var(--line);}
+.ws-label{font-size:.7rem;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono);margin-bottom:6px;}
+.chat-log{margin-top:10px;max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 2px;}
+.chat-bubble{max-width:78%;padding:9px 13px;border-radius:14px;line-height:1.55;font-size:.92rem;}
+.chat-ai{align-self:flex-start;background:var(--card-alt);border:1px solid var(--line);border-bottom-left-radius:4px;}
+.chat-user{align-self:flex-end;background:var(--accent-soft);color:var(--ink);border-bottom-right-radius:4px;}
+.stepper{display:flex;align-items:center;}
+.step{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.76rem;font-family:var(--mono);background:var(--card-alt);border:1px solid var(--line);color:var(--sub);flex:none;}
+.step.done{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-soft);}
+.step.current{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700;}
+.step-line{flex:1;height:2px;background:var(--line);min-width:8px;}
+.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40;display:none;}
+.drawer-backdrop.open{display:block;}
+.settings-drawer{position:fixed;top:0;right:-380px;width:360px;max-width:88vw;height:100vh;background:var(--card);border-left:1px solid var(--line);box-shadow:-10px 0 28px rgba(0,0,0,.18);padding:16px;overflow-y:auto;transition:right .2s;z-index:50;}
+.settings-drawer.open{right:0;}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line);}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+@media(max-width:900px){
+  .app-body{flex-direction:column;}
+  .app-sidebar{width:100%;position:sticky;top:49px;max-height:none;border-right:none;border-bottom:1px solid var(--line);display:flex;flex-direction:row;overflow-x:auto;padding:8px 10px;gap:14px;background:var(--card);z-index:10;}
+  .nav-group{display:flex;align-items:center;gap:4px;margin-bottom:0;flex:none;}
+  .nav-label{margin-bottom:0;white-space:nowrap;}
+  .app-sidebar button{white-space:nowrap;width:auto;margin-bottom:0;}
+  .app-main{padding:14px;}
+}
 .tag{font-size:.75rem;color:var(--sub);}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px;}
-select,input[type=text],input[type=password],textarea{padding:8px;border:1px solid var(--line);border-radius:8px;font-size:.9rem;background:#fff;}
-button{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:.9rem;transition:.15s;}
+select,input[type=text],input[type=password],textarea{padding:8px;border:1px solid var(--line);border-radius:8px;font-size:.9rem;background:var(--card);color:var(--ink);}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent);}
+button{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer;font-size:.9rem;transition:.15s;}
 button:hover{border-color:var(--accent);}
 button.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
 button.blue{background:var(--accent2);color:#fff;border-color:var(--accent2);}
 button:disabled{opacity:.4;cursor:not-allowed;}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;}
 .tabs button{border-radius:20px;}
-.tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
-.jp{font-size:1.7rem;line-height:1.5;font-weight:600;min-height:2.6rem;}
+.tabs button.active{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.tabs-core button{border-radius:8px;padding:10px 18px;font-weight:700;font-size:.92rem;background:var(--card-alt);border-bottom:3px solid transparent;}
+.tabs-core button.active{background:var(--card);color:var(--accent);border-color:var(--line);border-bottom-color:var(--accent);}
+.tabs-more{margin-top:2px;}
+.tabs-more button{border-radius:20px;font-size:.78rem;padding:5px 12px;color:var(--sub);background:transparent;}
+.tabs-more button.active{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.jp{font-size:clamp(1.7rem,1.3rem + 1.6vw,2.6rem);line-height:1.5;font-weight:600;min-height:2.6rem;}
 .kana{font-size:1rem;color:var(--accent2);margin-top:6px;min-height:1.2rem;}
 .cn{font-size:1rem;color:var(--sub);margin-top:6px;min-height:1.2rem;}
 .hidden-text{filter:blur(8px);cursor:pointer;user-select:none;}
-.progress{font-size:.8rem;color:var(--sub);margin-bottom:8px;}
+.progress{font-size:.8rem;color:var(--sub);margin-bottom:8px;font-family:var(--mono);}
 .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:12px;}
 .bar>div{height:100%;background:var(--accent);width:0%;transition:.3s;}
 .status{font-size:.85rem;color:var(--accent);min-height:1.2rem;margin-top:8px;}
-.cue-box{background:#fdf3ef;border:1px dashed var(--accent);border-radius:8px;padding:10px;margin-top:10px;font-size:1.2rem;}
+.cue-box{background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:10px;margin-top:10px;font-size:1.2rem;}
 .small{font-size:.78rem;color:var(--sub);}
 details{margin-top:8px;font-size:.85rem;}
 summary{cursor:pointer;color:var(--accent2);}
-.pill{display:inline-block;background:#eee;border-radius:10px;padding:2px 8px;font-size:.72rem;margin-left:6px;}
+.pill{display:inline-block;background:var(--chip);border-radius:10px;padding:2px 8px;font-size:.72rem;margin-left:6px;}
 label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:center;}
 .rec-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#d00;animation:blink 1s infinite;}
 @keyframes blink{50%{opacity:.2;}}
-.wktable{border-collapse:collapse;font-size:.82rem;white-space:nowrap;}
-.mastery0{background:#efe2dc;}
-.mastery1{background:#e3aa95;}
-.mastery2{background:#d4744f;}
-.mastery3{background:#c04a2b;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);}
-.masteryLocked{background:#eae7df;border:1px dashed #b8b2a4;}
+.wktable{border-collapse:collapse;font-size:.82rem;white-space:nowrap;font-family:var(--mono);}
+.mastery0{background:var(--m0);}
+.mastery1{background:var(--m1);}
+.mastery2{background:var(--m2);}
+.mastery3{background:var(--m3);box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);}
+.masteryLocked{background:var(--mLocked);border:1px dashed var(--line);}
 .examLegend{display:flex;flex-wrap:wrap;gap:12px 18px;font-size:.78rem;color:var(--sub);margin-top:8px;}
 .examLegend .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px;}
-.examStats{font-size:.82rem;color:var(--sub);margin-top:6px;font-variant-numeric:tabular-nums;}
+.examStats{font-size:.82rem;color:var(--sub);margin-top:6px;font-variant-numeric:tabular-nums;font-family:var(--mono);}
 .examWall{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px;}
-.examCluster{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:#fbfaf7;}
+.examCluster{border:1px solid var(--line);border-radius:9px;padding:9px 10px;background:var(--card-alt);}
 .examCluster.locked{background:transparent;border-style:dashed;}
+.examCluster.active{background:var(--card);border-left:3px solid var(--accent);}
 .examClHead{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-bottom:7px;}
-.examClNo{font-size:.68rem;color:var(--sub);font-variant-numeric:tabular-nums;}
+.examClNo{font-size:.7rem;color:var(--sub);font-variant-numeric:tabular-nums;font-family:var(--mono);background:var(--chip);padding:1px 6px;border-radius:4px;}
 .examClTitle{font-size:.74rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
-.examCluster.locked .examClTitle{color:#b8b2a4;}
+.examCluster.locked .examClTitle{color:var(--sub);opacity:.6;}
 .examDots{display:flex;flex-wrap:wrap;gap:5px;}
-.examDot{width:16px;height:16px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.06);}
+.examDot{width:18px;height:18px;border-radius:4px;flex:none;border:1px solid rgba(0,0,0,.06);}
 .mpWall{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .mpCard{width:32px;height:32px;border-radius:6px;flex:none;}
 .wktable td,.wktable th{border:1px solid var(--line);padding:4px 8px;text-align:left;}
-.wktable tr.wkNow{background:#fdf3ef;}
+.wktable tr.wkNow{background:var(--accent-soft);}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-@media(max-width:600px){.grid2{grid-template-columns:1fr;}.jp{font-size:1.35rem;}select,input[type=text],input[type=password],textarea{font-size:1rem;}}
+@media(max-width:600px){.grid2{grid-template-columns:1fr;}select,input[type=text],input[type=password],textarea{font-size:1rem;}}
 </style>
 </head>
 <body>
-<h1>FSI 日語訓練工具 <span class="pill">聽 → 說 → 反覆操練</span></h1>
-<div class="tag">FSI 口語操練法：先聽不看字、跟讀、代換、應答、逐段累加、轉換——這6個是核心操練，其餘分頁（錄音對比、聽辨、影子跟讀、角色扮演、綜合測驗、作業批改）是進階或選用功能，練熟核心操練後再摸索也可以。搭配 Google Cloud TTS 日語語音，沒填 API Key 則用瀏覽器內建語音。</div>
+<div class="app-shell">
+  <header class="app-header">
+    <h1>FSI 日語訓練工具</h1>
+    <button id="settingsBtn" class="ghost" aria-label="設定" aria-expanded="false">⚙ 設定</button>
+  </header>
+  <div class="app-body">
+    <nav class="app-sidebar tabs" id="sidebarNav">
+      <div class="nav-group">
+        <div class="nav-label">核心操練</div>
+        <button data-mode="listen" class="active">① 聽讀</button>
+        <button data-mode="sub">② 代換</button>
+        <button data-mode="qa">③ 應答</button>
+        <button data-mode="build">④ 逐段累加</button>
+        <button data-mode="trans">🔁 轉換</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">發音</div>
+        <button data-mode="rec">⑤ 錄音對比</button>
+        <button data-mode="minpair">⑥ 聽辨</button>
+        <button data-mode="shadow">⑦ 影子跟讀</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">實戰</div>
+        <button data-mode="roleplay">⑧ 角色扮演</button>
+        <button data-mode="hw">⑩ 作業</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">測驗</div>
+        <button data-mode="exam">⑨ 綜合測驗</button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">其他</div>
+        <button data-mode="copy">📝 抄寫</button>
+        <button data-mode="custom">＋ 自訂教材</button>
+      </div>
+    </nav>
+    <main class="app-main">
+    <details class="tagDetails"><summary>FSI 口語操練法是什麼？</summary><div class="tag">先聽不看字、跟讀、代換、應答、逐段累加、轉換——這6個是核心操練，其餘（錄音對比、聽辨、影子跟讀、角色扮演、綜合測驗、作業批改）是進階或選用功能，練熟核心操練後再摸索也可以。搭配 Google Cloud TTS 日語語音，沒填 API Key 則用瀏覽器內建語音。</div></details>
 
 <div class="card" id="teacherCard" style="display:none;">
   <div class="row" style="align-items:center;gap:8px;">
@@ -73,7 +177,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <b id="teacherName"></b>　<span class="small" id="tdWeekInfo"></span>
   </div>
   <div id="teacherMsg" style="margin-top:6px;font-size:1.05rem;line-height:1.8;"></div>
-  <div id="teacherChatLog" class="small" style="margin-top:8px;max-height:220px;overflow-y:auto;line-height:1.8;display:none;"></div>
+  <div id="teacherChatLog" class="small chat-log" style="display:none;"></div>
   <div class="row" id="teacherChatRow" style="margin-top:8px;display:none;">
     <input type="text" id="teacherChatInput" style="flex:1;" placeholder="回她，或問點什麼…">
     <button id="teacherChatSend">送出</button>
@@ -144,10 +248,12 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <span class="opt"><input type="checkbox" id="ckDrill" disabled> 操練</span>
     <a href="https://github.com/open911251/fsi-japanese/blob/main/STUDY-GUIDE.md" target="_blank" rel="noopener" class="small">完整指南</a>
   </div>
-  <div id="tdRoutine" class="small" style="margin-top:8px;line-height:2;"></div>
+  <details style="margin-top:8px;"><summary>今日完整清單</summary><div id="tdRoutine" class="small" style="margin-top:8px;line-height:2;"></div></details>
 </div>
 
-<div class="card">
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<aside class="settings-drawer" id="settingsDrawer">
+  <div class="drawer-head"><b>設定</b><button id="settingsClose" class="ghost" aria-label="關閉設定">✕</button></div>
   <div class="row">
     <input type="password" id="apiKey" placeholder="Google Cloud TTS API Key（留空則用瀏覽器內建語音）" style="flex:1;min-width:220px;">
     <button id="saveKey">儲存</button>
@@ -217,32 +323,17 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </details>
   <div class="status" id="ttsStatus"></div>
   <div class="small" id="ttsSourceBadge"></div>
-</div>
+</aside>
 
-<div class="card">
+<div class="card" id="courseHeader">
   <div class="row">
     <select id="lessonSel" style="flex:1;min-width:240px;"></select>
   </div>
   <div class="small" id="grammarInfo" style="margin-top:6px;"></div>
-  <div class="tabs">
-    <button data-mode="listen" class="active">① 聽讀</button>
-    <button data-mode="sub">② 代換</button>
-    <button data-mode="qa">③ 應答</button>
-    <button data-mode="build">④ 逐段累加</button>
-    <button data-mode="trans">🔁 轉換</button>
-    <button data-mode="rec">⑤ 錄音對比</button>
-    <button data-mode="minpair">⑥ 聽辨</button>
-    <button data-mode="shadow">⑦ 影子跟讀</button>
-    <button data-mode="roleplay">⑧ 角色扮演</button>
-    <button data-mode="exam">⑨ 綜合測驗</button>
-    <button data-mode="hw">⑩ 作業</button>
-    <button data-mode="copy">📝 抄寫</button>
-    <button data-mode="custom">＋ 自訂教材</button>
-  </div>
 </div>
 
 <div class="card" id="drillCard">
-  <div id="drillDesc" style="margin-bottom:8px;"><b></b> <span class="small"></span></div>
+  <div id="drillDesc" class="drillDesc"><b></b> <span class="small"></span></div>
   <div class="progress" id="prog"></div>
   <div class="bar"><div id="barFill"></div></div>
   <div id="stage">
@@ -252,21 +343,21 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <div class="cn" id="cnText"></div>
     <div id="cueArea"></div>
   </div>
-  <div class="row" style="margin-top:16px;">
+  <div class="row drillControls" style="margin-top:16px;">
     <button class="primary" id="btnStart">▶ 開始</button>
-    <button id="btnPause">⏸ 暫停</button>
-    <button id="btnPrev">⏮ 上一句</button>
-    <button id="btnNext">⏭ 下一句</button>
-    <button id="btnReplay">🔁 重播</button>
-    <button id="btnRetryCue">🔁 重來</button>
-    <button id="btnContCue">➡ 繼續</button>
+    <button class="secondary" id="btnPause">⏸ 暫停</button>
+    <button class="secondary" id="btnPrev">⏮ 上一句</button>
+    <button class="secondary" id="btnNext">⏭ 下一句</button>
+    <button class="secondary" id="btnReplay">🔁 重播</button>
+    <button class="ghost" id="btnRetryCue">🔁 重來</button>
+    <button class="ghost" id="btnContCue">➡ 繼續</button>
   </div>
   <div class="status" id="drillStatus"></div>
   <div id="fbArea" class="small" style="margin-top:6px;line-height:1.8;"></div>
   <canvas id="fbCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="fbPitchInfo" class="small" style="margin-top:4px;"></div>
   <div id="fbMoraRow" style="margin-top:4px;"></div>
-  <button id="fbReplaySeg" style="display:none;margin-top:4px;">🐢 重聽差最大的一段（半速）</button>
+  <button class="ghost" id="fbReplaySeg" style="display:none;margin-top:4px;">🐢 重聽差最大的一段（半速）</button>
 </div>
 
 <div class="card" id="recCard" style="display:none;">
@@ -279,16 +370,24 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <div class="kana" id="recKana"></div>
     <div class="cn" id="recCn"></div>
   </div>
-  <div class="row" style="margin-top:14px;">
-    <button class="blue" id="recModel">▶ 示範音</button>
-    <button id="recBtn">🔴 錄音</button>
-    <button id="recPlay" disabled>▶ 我的錄音</button>
-    <button id="recAB" disabled>🔄 連續對比</button>
+  <div class="workspace-section">
+    <div class="ws-label">Model・示範</div>
+    <div class="row">
+      <button class="secondary" id="recModel">▶ 示範音</button>
+      <button class="ghost" id="recSlowModel">🐢 半速示範</button>
+    </div>
   </div>
-  <div class="row" style="margin-top:10px;">
+  <div class="workspace-section">
+    <div class="ws-label">You・你的錄音</div>
+    <div class="row">
+      <button class="secondary" id="recBtn">🔴 錄音</button>
+      <button class="secondary" id="recPlay" disabled>▶ 我的錄音</button>
+      <button class="ghost" id="recSlowMine" disabled>🐢 半速我的</button>
+      <button class="ghost" id="recAB" disabled>🔄 連續對比</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px;">
     <button class="primary" id="recAnalyze" disabled>📊 分析腔調差異</button>
-    <button id="recSlowModel">🐢 半速示範</button>
-    <button id="recSlowMine" disabled>🐢 半速我的</button>
   </div>
   <canvas id="pitchCanvas" width="860" height="190" style="width:100%;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="pitchFeedback" class="small" style="margin-top:8px;line-height:1.9;"></div>
@@ -306,7 +405,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="small" style="margin-top:10px;">聽一句，判斷是哪個詞</div>
   <div class="row" style="margin-top:12px;">
     <button class="primary" id="mpPlay">🔊 出題</button>
-    <button id="mpAgain" disabled>🔁 再聽一次</button>
+    <button class="ghost" id="mpAgain" disabled>🔁 再聽一次</button>
   </div>
   <div class="row" style="margin-top:12px;">
     <button id="mpOptA" style="flex:1;min-height:52px;" disabled></button>
@@ -335,46 +434,61 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
 
 <div class="card" id="shadowCard" style="display:none;">
   <b>影子跟讀</b>　<span class="small">真人音檔，同步跟讀＋錄音自聽，不分析音準</span>
-  <div class="row" style="margin-top:10px;">
-    <input type="file" id="shadowDirPick" webkitdirectory multiple accept="audio/*" style="display:none;">
-    <button id="shadowPickBtn">📁 選擇音檔資料夾</button>
-    <input type="file" id="shadowImportPick" accept="application/json" style="display:none;">
-    <button id="shadowImportBtn">📥 匯入預先分析的分句結果（JSON）</button>
-    <span class="small" id="shadowIdxStatus"></span>
+  <div class="workspace-section" style="margin-top:10px;padding-top:0;border-top:none;">
+    <div class="ws-label">素材</div>
+    <div class="row">
+      <input type="file" id="shadowDirPick" webkitdirectory multiple accept="audio/*" style="display:none;">
+      <button class="secondary" id="shadowPickBtn">📁 選擇音檔資料夾</button>
+      <input type="file" id="shadowImportPick" accept="application/json" style="display:none;">
+      <button class="ghost" id="shadowImportBtn">📥 匯入預先分析的分句結果（JSON）</button>
+      <span class="small" id="shadowIdxStatus"></span>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <select id="shadowLessonSel" style="flex:1;min-width:200px;" disabled></select>
+      <select id="shadowTrackSel" style="flex:1;min-width:160px;" disabled></select>
+    </div>
   </div>
-  <div class="row" style="margin-top:10px;">
-    <select id="shadowLessonSel" style="flex:1;min-width:200px;" disabled></select>
-    <select id="shadowTrackSel" style="flex:1;min-width:160px;" disabled></select>
+  <div class="workspace-section">
+    <div class="ws-label">播放器</div>
+    <audio id="shadowAudio" controls style="width:100%;"></audio>
+    <textarea id="shadowText" rows="4" style="width:100%;margin-top:8px;" disabled placeholder="貼上這段對應的課本文字（只需貼一次，會依課號＋小節存在瀏覽器，下次選到同一段自動帶出，方便邊聽邊看稿跟讀）。或用下面「自動偵測分句」直接讓 STT 幫你切句＋帶文字。"></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button class="ghost" id="shadowSlice" disabled>🔍 自動偵測分句（需先在「本地 AI 設定」填 STT URL）</button>
+      <span class="small" id="shadowSliceStatus"></span>
+    </div>
+    <div id="shadowSliceList" class="small" style="margin-top:4px;max-height:160px;overflow-y:auto;"></div>
   </div>
-  <audio id="shadowAudio" controls style="width:100%;margin-top:10px;"></audio>
-  <textarea id="shadowText" rows="4" style="width:100%;margin-top:8px;" disabled placeholder="貼上這段對應的課本文字（只需貼一次，會依課號＋小節存在瀏覽器，下次選到同一段自動帶出，方便邊聽邊看稿跟讀）。或用下面「自動偵測分句」直接讓 STT 幫你切句＋帶文字。"></textarea>
-  <div class="row" style="margin-top:8px;">
-    <button id="shadowSlice" disabled>🔍 自動偵測分句（需先在「本地 AI 設定」填 STT URL）</button>
-    <span class="small" id="shadowSliceStatus"></span>
+  <div class="workspace-section">
+    <div class="ws-label">A-B 區間</div>
+    <div class="row">
+      <button class="secondary" id="shadowPrevSeg" disabled>⬅ 上一句</button>
+      <button class="secondary" id="shadowNextSeg" disabled>下一句 ➡</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button class="ghost" id="shadowSetA" disabled>🅰 設起點</button>
+      <button class="ghost" id="shadowSetB" disabled>🅱 設終點</button>
+      <button class="ghost" id="shadowLoop" disabled>🔁 循環：關</button>
+      <button class="ghost" id="shadowClearAB" disabled>↺ 清除區間</button>
+      <span class="small" id="shadowABInfo"></span>
+    </div>
   </div>
-  <div id="shadowSliceList" class="small" style="margin-top:4px;max-height:160px;overflow-y:auto;"></div>
-  <div class="row" style="margin-top:6px;">
-    <button id="shadowPrevSeg" disabled>⬅ 上一句</button>
-    <button id="shadowNextSeg" disabled>下一句 ➡</button>
+  <div class="workspace-section">
+    <div class="ws-label">錄音</div>
+    <div class="row">
+      <button class="secondary" id="shadowRecBtn" disabled>🎙 跟讀（播放＋錄音）</button>
+      <button class="secondary" id="shadowPlayMine" disabled>▶ 聽自己</button>
+      <button class="ghost" id="shadowStop" disabled>⏹ 停止</button>
+      <button class="ghost" id="shadowAB" disabled>🔄 連續對比</button>
+      <button class="ghost" id="shadowDuet" disabled>🎧 同時播放（像卡拉OK）</button>
+      <button class="primary" id="shadowDone" disabled>✅ 記錄本次跟讀</button>
+    </div>
   </div>
-  <div class="row" style="margin-top:8px;">
-    <button id="shadowSetA" disabled>🅰 設起點</button>
-    <button id="shadowSetB" disabled>🅱 設終點</button>
-    <button id="shadowLoop" disabled>🔁 循環：關</button>
-    <button id="shadowClearAB" disabled>↺ 清除區間</button>
-    <span class="small" id="shadowABInfo"></span>
-  </div>
-  <div class="row" style="margin-top:12px;">
-    <button id="shadowRecBtn" disabled>🎙 跟讀（播放＋錄音）</button>
-    <button id="shadowPlayMine" disabled>▶ 聽自己</button>
-    <button id="shadowStop" disabled>⏹ 停止</button>
-    <button id="shadowAB" disabled>🔄 連續對比</button>
-    <button id="shadowDuet" disabled>🎧 同時播放（像卡拉OK）</button>
-    <button class="primary" id="shadowDone" disabled>✅ 記錄本次跟讀</button>
-  </div>
-  <div class="row" style="margin-top:8px;">
-    <button id="shadowAnalyzeBtn" disabled>🔍 講評</button>
-    <button id="shadowReplaySeg" style="display:none;">🐢 重播差異最大段</button>
+  <div class="workspace-section">
+    <div class="ws-label">分析</div>
+    <div class="row">
+      <button class="secondary" id="shadowAnalyzeBtn" disabled>🔍 講評</button>
+      <button class="ghost" id="shadowReplaySeg" style="display:none;">🐢 重播差異最大段</button>
+    </div>
   </div>
   <canvas id="shadowPitchCanvas" width="860" height="120" style="width:100%;margin-top:6px;background:#fff;border:1px solid var(--line);border-radius:8px;display:none;"></canvas>
   <div id="shadowPitchInfo" class="small" style="margin-top:4px;"></div>
@@ -388,17 +502,17 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <b>角色扮演</b>　<span class="small">AI 主動問，你依提示詞造句回答（需先在「本地 AI 設定」填 LLM URL）</span>
   <div class="row" style="margin-top:10px;">
     <select id="rpScenarioSel" style="flex:1;min-width:260px;"></select>
-    <button id="rpStartBtn">▶ 開始</button>
+    <button class="primary" id="rpStartBtn">▶ 開始</button>
   </div>
-  <div id="rpLog" style="margin-top:10px;max-height:260px;overflow-y:auto;"></div>
+  <div id="rpLog" class="chat-log"></div>
   <div class="small" id="rpCue" style="margin-top:8px;font-weight:600;"></div>
   <div class="row" style="margin-top:6px;">
     <input type="text" id="rpInput" style="flex:1;" placeholder="用日文回應…" disabled>
-    <button id="rpSendBtn" disabled>送出</button>
+    <button class="primary" id="rpSendBtn" disabled>送出</button>
   </div>
   <div class="row" style="margin-top:6px;">
-    <button id="rpExtBtn" style="display:none;">🗣 延伸對話練習（不判對錯，練臨場反應）</button>
-    <button id="rpExtStopBtn" style="display:none;">⏹ 結束對話</button>
+    <button class="ghost" id="rpExtBtn" style="display:none;">🗣 延伸對話練習（不判對錯，練臨場反應）</button>
+    <button class="ghost" id="rpExtStopBtn" style="display:none;">⏹ 結束對話</button>
   </div>
   <div class="status" id="rpStatus"></div>
   <div class="small" style="margin-top:8px;">第一版：固定情境、純文字、不存對話紀錄。每輪用提示詞的關鍵字比對對錯，AI 問句由 LLM 現場生成、生成後會先檢查沒有直接洩漏答案再顯示。</div>
@@ -440,18 +554,18 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
     <div class="kana" id="hwQKana"></div>
     <img id="hwImg" style="display:none;max-width:220px;max-height:220px;margin:8px 0;border:1px solid var(--line);border-radius:8px;">
     <div class="row" style="margin-top:8px;">
-      <button id="hwRecBtn">🎙 開始錄音</button>
-      <button id="hwNextBtn">下一題 →</button>
+      <button class="primary" id="hwRecBtn">🎙 開始錄音</button>
+      <button class="secondary" id="hwNextBtn">下一題 →</button>
     </div>
     <div class="row" style="margin-top:8px;">
-      <button id="hwSubmitBtn">📮 送出批改</button>
+      <button class="secondary" id="hwSubmitBtn">📮 送出批改</button>
     </div>
     <div class="status" id="hwStatus"></div>
   </div>
   <div id="hwResultArea" style="display:none;margin-top:10px;">
     <div id="hwResultList"></div>
     <div class="row" style="margin-top:10px;">
-      <button id="hwNewBatch">🔁 開始新一批</button>
+      <button class="secondary" id="hwNewBatch">🔁 開始新一批</button>
     </div>
   </div>
 </div>
@@ -464,7 +578,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
       <option value="custom">自訂教材（貼過的內容）</option>
       <option value="shadow">跟讀已分析的句子（隨機抽 20 句，真人音檔）</option>
     </select>
-    <button id="copyReroll" style="display:none;">🔀 換一批</button>
+    <button class="ghost" id="copyReroll" style="display:none;">🔀 換一批</button>
   </div>
   <div class="row" style="margin-top:8px;">
     <label class="opt"><input type="checkbox" id="copyHideKana"> 隱藏假名</label>
@@ -480,6 +594,10 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   <div class="row" style="margin-top:8px;">
     <button class="primary" id="customLoad">載入為課程</button>
     <span class="small">載入後可用「聽讀」與「錄音對比」模式訓練。內容會存在瀏覽器。</span>
+  </div>
+</div>
+
+    </main>
   </div>
 </div>
 
@@ -1619,6 +1737,14 @@ function switchMode(m){
 }
 $("lessonSel").onchange=e=>{stopRun();state.lesson=parseInt(e.target.value);state.idx=0;$("grammarInfo").textContent="文法重點："+(curLesson()?curLesson().g:"");switchMode(state.mode==="rec"||state.mode==="custom"?"listen":state.mode);};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>switchMode(b.dataset.mode));
+function settingsOpen(open){
+  $("settingsDrawer").classList.toggle("open",open);
+  $("drawerBackdrop").classList.toggle("open",open);
+  $("settingsBtn").setAttribute("aria-expanded",open?"true":"false");
+}
+$("settingsBtn").onclick=()=>settingsOpen(!$("settingsDrawer").classList.contains("open"));
+$("settingsClose").onclick=()=>settingsOpen(false);
+$("drawerBackdrop").onclick=()=>settingsOpen(false);
 $("btnStart").onclick=()=>{if(state.running)return;if(state.idx===0)shufSeed++;runFrom(state.idx);};
 $("btnPause").onclick=()=>{stopRun();setStatus("drillStatus","已暫停，按「開始」從目前句子繼續。");};
 $("btnPrev").onclick=()=>{stopRun();state.idx=Math.max(0,state.idx-1);runFrom(state.idx);};
@@ -2137,7 +2263,7 @@ function examRenderAll(){
     const unlocked=examWin.u.indexOf(li)>=0;
     const n=examPatternCount(li);
     const div=document.createElement("div");
-    div.className="examCluster"+(unlocked?"":" locked");
+    div.className="examCluster"+(unlocked?(examWin.a[li]?"":" active"):" locked");
     let dots="";
     for(let pi=0;pi<n;pi++){
       if(!unlocked){dots+="<span class='examDot masteryLocked'></span>";continue;}
@@ -2812,8 +2938,8 @@ function teacherChatRender(){
   if(ready&&teacherChatHistory.length){
     $("teacherChatLog").style.display="";
     $("teacherChatLog").innerHTML=teacherChatHistory.map(m=>{
-      if(m.role==="assistant")return"<div style='display:flex;gap:6px;align-items:flex-start;margin-top:4px;'>"+(av?"<img src='"+av+"' style='width:20px;height:20px;border-radius:50%;object-fit:cover;'>":"")+"<span>"+teacherEsc(m.content)+"</span></div>";
-      return"<div style='margin-top:4px;text-align:right;color:var(--sub);'>"+teacherEsc(m.content)+"</div>";
+      if(m.role==="assistant")return"<div class='chat-bubble chat-ai' style='display:flex;gap:6px;align-items:flex-start;'>"+(av?"<img src='"+av+"' style='width:20px;height:20px;border-radius:50%;object-fit:cover;flex:none;'>":"")+"<span>"+teacherEsc(m.content)+"</span></div>";
+      return"<div class='chat-bubble chat-user'>"+teacherEsc(m.content)+"</div>";
     }).join("");
     $("teacherChatLog").scrollTop=$("teacherChatLog").scrollHeight;
   }else{
@@ -2884,7 +3010,7 @@ function hwStart(){
 function hwRenderRecordStep(){
   const hw=hwState;if(!hw)return;
   const it=hw.items[hw.cursor];
-  $("hwProgress").textContent="第 "+(hw.cursor+1)+" / "+hw.items.length+" 題　（已錄 "+hw.answers.filter(Boolean).length+" 題）";
+  $("hwProgress").innerHTML="<div class='stepper'>"+hw.items.map((_,i)=>(i>0?"<span class='step-line'></span>":"")+"<span class='step"+(i===hw.cursor?" current":"")+(hw.answers[i]?" done":"")+"'>"+(i+1)+"</span>").join("")+"</div><div class='small' style='margin-top:6px;'>已錄 "+hw.answers.filter(Boolean).length+" / "+hw.items.length+" 題</div>";
   $("hwQText").textContent=it.q;
   $("hwQKana").textContent=it.qk;
   if(it.img){$("hwImg").src=it.img;$("hwImg").style.display="";}else{$("hwImg").style.display="none";}
@@ -3210,9 +3336,9 @@ function rpExtStart(){
 function rpRender(){
   const log=$("rpLog");
   log.innerHTML=rpLogEntries.map(e=>{
-    if(e.role==="ai")return"<div style='margin-top:4px;'>🤖 "+teacherEsc(e.text)+"</div>";
+    if(e.role==="ai")return"<div class='chat-bubble chat-ai'>🤖 "+teacherEsc(e.text)+"</div>";
     const mark=e.hit===undefined?"":(e.hit?" ✅":" ❌");/* 延伸對話的使用者發言沒有hit欄位＝不判對錯，不畫勾叉 */
-    return"<div style='margin-top:4px;text-align:right;color:var(--sub);'>"+teacherEsc(e.text)+mark+"</div>";
+    return"<div class='chat-bubble chat-user'>"+teacherEsc(e.text)+mark+"</div>";
   }).join("");
   log.scrollTop=log.scrollHeight;
 }
