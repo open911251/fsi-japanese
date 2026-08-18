@@ -181,6 +181,7 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
         <div class="nav-label">其他</div>
         <button data-mode="copy">📝 抄寫</button>
         <button data-mode="custom">＋ 自訂教材</button>
+        <button data-mode="weak">🎯 弱點</button>
       </div>
     </nav>
     <main class="app-main">
@@ -556,6 +557,21 @@ label.opt{font-size:.82rem;color:var(--sub);display:flex;gap:4px;align-items:cen
   </div>
   <div id="examResult" style="margin-top:10px;line-height:1.9;"></div>
   <div class="status" id="examStatus"></div>
+</div>
+
+<div class="card" id="weakCard" style="display:none;">
+  <b>🎯 弱點加強</b>　<span class="small">重組你已經有的成績跟聽辨紀錄，找出比較弱的課次跟聽辨對立組，不接LLM、不出新內容</span>
+  <div class="workspace-section" style="padding-top:0;border-top:none;">
+    <div class="ws-label">課次弱點（best &lt; 75%）</div>
+    <div id="weakLessons"></div>
+  </div>
+  <div class="workspace-section">
+    <div class="ws-label">聽辨弱點（答對率偏低的對立組）</div>
+    <div id="weakMinpairs"></div>
+    <div class="row" style="margin-top:8px;">
+      <button class="secondary" id="weakGoMp">去聽辨</button>
+    </div>
+  </div>
 </div>
 
 <div class="card" id="homeworkCard" style="display:none;">
@@ -1725,7 +1741,7 @@ function switchMode(m){
   $("fbArea").textContent="";$("fbPitchInfo").textContent="";$("fbCanvas").style.display="none";$("fbReplaySeg").style.display="none";fbSeg=null;renderMoraRow("fbMoraRow",null);
   showQaImage(null);showExamImage(null);
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
-  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam"||m==="hw")?"none":"";
+  $("drillCard").style.display=(m==="rec"||m==="custom"||m==="minpair"||m==="shadow"||m==="roleplay"||m==="copy"||m==="exam"||m==="hw"||m==="weak")?"none":"";
   $("recCard").style.display=m==="rec"?"":"none";
   $("customCard").style.display=m==="custom"?"":"none";
   $("minPairCard").style.display=m==="minpair"?"":"none";
@@ -1735,13 +1751,15 @@ function switchMode(m){
   $("examCard").style.display=m==="exam"?"":"none";
   $("examQuizCard").style.display=m==="exam"?"":"none";
   $("homeworkCard").style.display=m==="hw"?"":"none";
+  $("weakCard").style.display=m==="weak"?"":"none";
   if(m==="rec")fillRecSel();
   if(m==="minpair"){mpScoreShow();apScoreShow();}
   if(m==="copy")copyRender();
   if(m==="exam")examRenderAll();
+  if(m==="weak")weakRender();
   if(m!=="shadow")shadowPauseAll();
   if(m!=="hw")hwStop();/* 離開作業分頁：取消任何進行中的錄音，不寫入hwState（比照stopRun透過runId取消的模式） */
-  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"&&m!=="exam"&&m!=="hw"){
+  if(m!=="rec"&&m!=="custom"&&m!=="minpair"&&m!=="shadow"&&m!=="roleplay"&&m!=="copy"&&m!=="exam"&&m!=="hw"&&m!=="weak"){
     const L=curLesson();
     const empty=!L||items().length===0;
     showText(empty?"此課程沒有這種練習":"請按「開始」","","");
@@ -1789,6 +1807,7 @@ $("testKey").onclick=async()=>{
   catch(e){setStatus("ttsStatus","❌ 失敗："+e.message);}
 };
 $("fbReplaySeg").onclick=fbReplaySeg;
+$("weakGoMp").onclick=()=>switchMode("minpair");
 $("mpPlay").onclick=mpAsk;
 $("mpAgain").onclick=()=>{if(mp.cur)say(mp.cur.s[mp.side]);};
 $("mpOptA").onclick=()=>mpAnswer(0);
@@ -2763,6 +2782,39 @@ function lastPracticed(){
   let best=null;
   Object.keys(scores).forEach(l=>{["sub","qa","build","trans"].forEach(m=>{const e=scores[l]&&scores[l][m];if(e&&e.t&&(!best||e.t>best.t))best={lesson:parseInt(l),mode:m,last:e.last,t:e.t};});});
   return best;
+}
+function findWeakSpots(){/* 弱點加強專區的資料層：純讀取scores/mpHist.g，門檻沿用scoreBadge()/mpPick()既有慣例，不發明新演算法 */
+  const lessons=[];
+  Object.keys(scores).forEach(li=>{
+    const l=parseInt(li);const L=LESSONS[l];if(!L||L.pending)return;
+    ["sub","qa","build","trans"].forEach(m=>{
+      const e=scores[li][m];
+      if(e&&e.t&&e.best<75)lessons.push({lesson:l,mode:m,best:e.best,title:L.t.replace(/^第\d+課\s*/,"")});
+    });
+  });
+  lessons.sort((a,b)=>a.best-b.best);
+  const minpairs=[];
+  Object.keys(mpHist.g||{}).forEach(k=>{
+    const st=mpHist.g[k];if(st.n<3)return;
+    const wr=(st.n-st.ok)/st.n;
+    if(wr>=0.4)minpairs.push({key:k,wr:wr,n:st.n});
+  });
+  minpairs.sort((a,b)=>b.wr-a.wr);
+  return{lessons:lessons,minpairs:minpairs};
+}
+function weakRender(){
+  const w=findWeakSpots();
+  $("weakLessons").innerHTML=w.lessons.length?w.lessons.map(x=>
+    "<div class='row' style='margin-top:6px;justify-content:space-between;'><span>第"+(x.lesson+1)+"課 "+teacherEsc(x.title)+"　"+TD_MODENAME[x.mode]+"　⚠"+x.best+"%</span>"+
+    "<button class='ghost weakGoBtn' data-lesson='"+x.lesson+"' data-mode='"+x.mode+"'>練這個</button></div>"
+  ).join(""):"<div class='small'>目前沒有低於75%的課次，繼續保持。</div>";
+  $("weakMinpairs").innerHTML=w.minpairs.length?w.minpairs.map(x=>{
+    const parts=x.key.split("|");
+    return"<div class='row' style='margin-top:6px;'><span>"+teacherEsc(parts[0])+" vs "+teacherEsc(parts[1])+"　答對率"+Math.round((1-x.wr)*100)+"%（"+x.n+"次）</span></div>";
+  }).join(""):"<div class='small'>目前沒有明顯偏弱的聽辨組。</div>";
+  document.querySelectorAll(".weakGoBtn").forEach(b=>b.onclick=()=>{
+    state.lesson=parseInt(b.dataset.lesson);fillLessons();switchMode(b.dataset.mode);runFrom(0);
+  });
 }
 const TD_MODENAME={listen:"聽讀",sub:"代換",qa:"應答",build:"逐段"};
 const ROUTINE=[
